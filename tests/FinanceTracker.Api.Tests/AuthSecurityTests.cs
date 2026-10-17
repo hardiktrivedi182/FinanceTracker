@@ -132,4 +132,23 @@ public class AuthSecurityTests : IClassFixture<WebApplicationFactory<Program>>
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("isAuthenticated").GetBoolean().Should().BeFalse();
     }
+
+    [Fact]
+    public async Task Logout_InDevelopment_ClearsDevUserCookie()
+    {
+        var client = _factory.CreateClient();
+        // First log in with dev-login
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/dev-login", new DevLoginRequest("partner-1"));
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Then log out
+        var logoutResponse = await client.PostAsync("/api/auth/logout", null);
+        logoutResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Check that dev_user_id was expired / deleted
+        logoutResponse.Headers.Should().ContainKey("Set-Cookie");
+        var cookies = logoutResponse.Headers.GetValues("Set-Cookie");
+        cookies.Should().Contain(c => c.Contains("dev_user_id="));
+    }
 }
+

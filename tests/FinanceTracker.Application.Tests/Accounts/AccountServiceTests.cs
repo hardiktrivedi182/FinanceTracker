@@ -245,4 +245,60 @@ public class AccountServiceTests
         result.SourceReference.Should().Be("FD-12345");
         existingAccount.LatestValuation!.Amount.Should().Be(550000m);
     }
+
+    [Fact]
+    public async Task GetAccountByIdAsync_WhenAccountBelongsToAnotherHousehold_ReturnsNull()
+    {
+        var otherHouseholdAccountId = Guid.NewGuid();
+
+        // Repository returns null because the query includes household ID filter
+        _repository.GetByIdAsync(_householdId, otherHouseholdAccountId, Arg.Any<CancellationToken>())
+            .Returns((Account?)null);
+
+        var sut = new AccountService(_repository, _householdContext, _currentUser);
+
+        var result = await sut.GetAccountByIdAsync(otherHouseholdAccountId);
+
+        result.Should().BeNull();
+        await _repository.Received(1).GetByIdAsync(_householdId, otherHouseholdAccountId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAccountsAsync_StrictlyFiltersByActiveHouseholdId()
+    {
+        var sut = new AccountService(_repository, _householdContext, _currentUser);
+
+        await sut.GetAccountsAsync(includeInactive: false);
+
+        await _repository.Received(1).GetByHouseholdIdAsync(_householdId, false, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAccountsAsync_WhenUnauthenticated_ThrowsUnauthorizedAccessException()
+    {
+        _currentUser.IsAuthenticated.Returns(false);
+        _currentUser.UserId.Returns((string?)null);
+
+        var sut = new AccountService(_repository, _householdContext, _currentUser);
+
+        var act = () => sut.GetAccountsAsync();
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*Authentication required*");
+    }
+
+    [Fact]
+    public async Task GetAccountsAsync_WhenNoActiveHousehold_ThrowsUnauthorizedAccessException()
+    {
+        _householdContext.HasHousehold.Returns(false);
+        _householdContext.HouseholdId.Returns(Guid.Empty);
+
+        var sut = new AccountService(_repository, _householdContext, _currentUser);
+
+        var act = () => sut.GetAccountsAsync();
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*Active household context is required*");
+    }
 }
+

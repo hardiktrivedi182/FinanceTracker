@@ -4,6 +4,7 @@ using FinanceTracker.Application.Accounts.Dtos;
 using FinanceTracker.Domain.Enums;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace FinanceTracker.Api.Tests;
@@ -148,4 +149,44 @@ public class AccountsEndpointTests : IClassFixture<WebApplicationFactory<Program
         fetched!.LatestBalance.Should().Be(250000m);
         fetched.LatestValuationDate.Should().Be(new DateOnly(2026, 3, 31));
     }
+
+    [Fact]
+    public async Task GetAccountById_WhenAccountBelongsToDifferentHousehold_ReturnsNotFound()
+    {
+        // Seed an account into an entirely different household
+        var otherHouseholdId = Guid.NewGuid();
+        var otherAccountId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FinanceTracker.Infrastructure.Persistence.FinanceTrackerDbContext>();
+            var otherHousehold = new FinanceTracker.Domain.Entities.Household(otherHouseholdId, "Foreign Household", now);
+            var otherAccount = new FinanceTracker.Domain.Entities.Account(
+                otherAccountId,
+                otherHouseholdId,
+                "Foreign Private Account",
+                AccountType.Savings,
+                OwnershipType.Joint,
+                null,
+                "USD",
+                "foreign-user",
+                now);
+
+            db.Households.Add(otherHousehold);
+            db.Accounts.Add(otherAccount);
+            await db.SaveChangesAsync();
+        }
+
+        // Authenticated client belongs to DefaultHouseholdId (Household 1)
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-User-Id", "partner-1");
+
+        // Attempt to fetch foreign account
+        var response = await client.GetAsync($"/api/accounts/{otherAccountId}");
+
+        // Must return 404 because cross-household queries are strictly partitioned
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
 }
+

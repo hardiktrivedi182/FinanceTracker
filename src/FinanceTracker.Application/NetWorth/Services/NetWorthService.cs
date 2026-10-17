@@ -188,12 +188,25 @@ public class NetWorthService : INetWorthService
             var jointLiabilities = accountItems.Where(a => a.OwnershipType == OwnershipType.Joint && a.IsLiability).Sum(a => a.Amount);
             var jointTotal = jointAssets - jointLiabilities;
 
-            var p1Assets = accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && a.OwnerUserId == "partner-1" && !a.IsLiability).Sum(a => a.Amount);
-            var p1Liab = accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && a.OwnerUserId == "partner-1" && a.IsLiability).Sum(a => a.Amount);
+            // Dynamically identify individual owners, matching partner-1/partner-2 if present or falling back to distinct owners
+            var distinctOwners = accountItems
+                .Where(a => a.OwnershipType == OwnershipType.Individual && !string.IsNullOrWhiteSpace(a.OwnerUserId))
+                .Select(a => a.OwnerUserId!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(u => u, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            string? p1Id = distinctOwners.FirstOrDefault(u => string.Equals(u, "partner-1", StringComparison.OrdinalIgnoreCase))
+                ?? distinctOwners.ElementAtOrDefault(0);
+            string? p2Id = distinctOwners.FirstOrDefault(u => string.Equals(u, "partner-2", StringComparison.OrdinalIgnoreCase))
+                ?? distinctOwners.FirstOrDefault(u => !string.Equals(u, p1Id, StringComparison.OrdinalIgnoreCase));
+
+            var p1Assets = p1Id != null ? accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && string.Equals(a.OwnerUserId, p1Id, StringComparison.OrdinalIgnoreCase) && !a.IsLiability).Sum(a => a.Amount) : 0m;
+            var p1Liab = p1Id != null ? accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && string.Equals(a.OwnerUserId, p1Id, StringComparison.OrdinalIgnoreCase) && a.IsLiability).Sum(a => a.Amount) : 0m;
             var p1Individual = p1Assets - p1Liab;
 
-            var p2Assets = accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && a.OwnerUserId == "partner-2" && !a.IsLiability).Sum(a => a.Amount);
-            var p2Liab = accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && a.OwnerUserId == "partner-2" && a.IsLiability).Sum(a => a.Amount);
+            var p2Assets = p2Id != null ? accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && string.Equals(a.OwnerUserId, p2Id, StringComparison.OrdinalIgnoreCase) && !a.IsLiability).Sum(a => a.Amount) : 0m;
+            var p2Liab = p2Id != null ? accountItems.Where(a => a.OwnershipType == OwnershipType.Individual && string.Equals(a.OwnerUserId, p2Id, StringComparison.OrdinalIgnoreCase) && a.IsLiability).Sum(a => a.Amount) : 0m;
             var p2Individual = p2Assets - p2Liab;
 
             // 50% joint allocation

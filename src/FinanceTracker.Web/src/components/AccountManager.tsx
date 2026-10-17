@@ -127,7 +127,13 @@ export function AccountManager() {
     e.preventDefault()
     try {
       setError(null)
-      await createAccount(formData)
+      const currency = formData.currencyCode.trim().toUpperCase()
+      if (!/^[A-Z]{3}$/.test(currency)) {
+        setError('Currency code must be a 3-letter ISO 4217 ASCII code (e.g., INR, USD, EUR).')
+        return
+      }
+
+      await createAccount({ ...formData, currencyCode: currency })
       setShowAddModal(false)
       setFormData({
         name: '',
@@ -303,6 +309,11 @@ export function AccountManager() {
                   <div>Partner 1 Total Share: {curr.ownershipBreakdown.partner1TotalShare.toLocaleString(undefined, { minimumFractionDigits: 2 })} (Indiv: {curr.ownershipBreakdown.partner1IndividualTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})</div>
                   <div>Partner 2 Total Share: {curr.ownershipBreakdown.partner2TotalShare.toLocaleString(undefined, { minimumFractionDigits: 2 })} (Indiv: {curr.ownershipBreakdown.partner2IndividualTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})</div>
                 </div>
+                {curr.accounts.some((a) => a.hasMissingValuation) && (
+                  <div style={{ marginTop: '0.5rem', background: '#fef3c7', color: '#92400e', padding: '0.35rem 0.5rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 500 }}>
+                    ⚠️ {curr.accounts.filter((a) => a.hasMissingValuation).length} account(s) have no valuation on or before {netWorthReport.asOfDate} (counted as 0.00).
+                  </div>
+                )}
               </div>
             ))}
           </div>

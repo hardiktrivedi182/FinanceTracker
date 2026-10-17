@@ -76,7 +76,7 @@
 
 **Layers:** Domain · Application · API · Web  
 **Complexity:** **M**  
-**Status:** **Completed & Verified (NetWorthServiceTests + NetWorthEndpointTests)**
+**Status:** **Completed, Audited & Verified (116 backend tests + 4 frontend tests; see `docs/reviews/security-financial-readiness.md`)**
 
 ---
 

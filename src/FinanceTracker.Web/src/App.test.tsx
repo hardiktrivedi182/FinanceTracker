@@ -106,4 +106,95 @@ describe('App Component', () => {
     expect(screen.getByText('Add Financial Account / Asset')).toBeInTheDocument()
     expect(screen.getByText('Asset / Liability Type:')).toBeInTheDocument()
   })
+
+  it('displays a warning banner on net worth card when an account has a missing valuation', async () => {
+    const mockAccounts = [
+      {
+        id: 'acc-1',
+        householdId: 'hh-1',
+        name: 'Unvalued Account',
+        accountType: 'Checking',
+        ownershipType: 'Joint',
+        ownerUserId: null,
+        currencyCode: 'USD',
+        isActive: true,
+        createdByUserId: 'partner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        latestBalance: null,
+        latestValuationDate: null,
+        isStale: false,
+      },
+    ]
+
+    const mockNetWorth = {
+      asOfDate: '2026-10-18',
+      generatedAt: '2026-10-18T00:00:00Z',
+      stalenessThresholdDays: 90,
+      currencies: [
+        {
+          currencyCode: 'USD',
+          totalAssets: 0,
+          totalLiabilities: 0,
+          netWorth: 0,
+          ownershipBreakdown: {
+            jointTotal: 0,
+            partner1IndividualTotal: 0,
+            partner2IndividualTotal: 0,
+            partner1TotalShare: 0,
+            partner2TotalShare: 0,
+          },
+          assetAllocation: [],
+          accounts: [
+            {
+              accountId: 'acc-1',
+              accountName: 'Unvalued Account',
+              accountType: 'Checking',
+              ownershipType: 'Joint',
+              ownerUserId: null,
+              isLiability: false,
+              valuationDate: null,
+              amount: 0,
+              isStale: false,
+              hasMissingValuation: true,
+              sourceType: null,
+            },
+          ],
+        },
+      ],
+    }
+
+    vi.mocked(fetch).mockImplementation((url: RequestInfo | URL) => {
+      const urlStr = url.toString()
+      if (urlStr.includes('/api/health')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve('Healthy'),
+        } as Response)
+      }
+      if (urlStr.includes('/api/accounts')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockAccounts),
+        } as Response)
+      }
+      if (urlStr.includes('/api/household/net-worth')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockNetWorth),
+        } as Response)
+      }
+      return Promise.reject(new Error('Unknown url'))
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/1 account\(s\) have no valuation on or before 2026-10-18/i)).toBeInTheDocument()
+    })
+  })
 })
+

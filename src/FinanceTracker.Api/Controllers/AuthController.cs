@@ -103,6 +103,10 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout()
     {
         await _signInManager.SignOutAsync();
+        if (_env.IsDevelopment())
+        {
+            Response.Cookies.Delete("dev_user_id");
+        }
         return Ok(new { message = "Signed out." });
     }
 
