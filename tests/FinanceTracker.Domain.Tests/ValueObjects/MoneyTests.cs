@@ -23,9 +23,18 @@ public class MoneyTests
         money.CurrencyCode.Should().Be("USD");
     }
 
+    [Fact]
+    public void Constructor_TrimsWhitespaceFromCurrency()
+    {
+        var money = new Money(10m, " eur ");
+
+        money.CurrencyCode.Should().Be("EUR");
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
+    [InlineData("   ")]
     [InlineData(null)]
     public void Constructor_WithInvalidCurrency_ThrowsArgumentException(string? currency)
     {
@@ -37,12 +46,60 @@ public class MoneyTests
     [Theory]
     [InlineData("US")]
     [InlineData("USDX")]
-    public void Constructor_WithNonThreeLetterCurrency_ThrowsArgumentException(string currency)
+    [InlineData("U")]
+    [InlineData("123")]
+    [InlineData("US1")]
+    [InlineData("US$")]
+    [InlineData("€UR")]
+    public void Constructor_WithNonThreeAsciiLetterCurrency_ThrowsArgumentException(string currency)
     {
         var act = () => new Money(10m, currency);
 
         act.Should().Throw<ArgumentException>()
             .WithMessage("*3-letter ISO 4217*");
+    }
+
+    [Fact]
+    public void DefaultStruct_HasZeroAmountAndDefaultCurrency()
+    {
+        var defaultMoney = default(Money);
+
+        defaultMoney.Amount.Should().Be(0m);
+        defaultMoney.CurrencyCode.Should().Be("XXX");
+        defaultMoney.ToString().Should().Be("0.00 XXX");
+    }
+
+    [Fact]
+    public void ParameterlessConstructor_CreatesDefaultMoney()
+    {
+        var money = new Money();
+
+        money.Amount.Should().Be(0m);
+        money.CurrencyCode.Should().Be("XXX");
+    }
+
+    [Fact]
+    public void DefaultStruct_ArithmeticWithSameCurrency_Works()
+    {
+        var defaultMoney = default(Money);
+        var xxxMoney = new Money(5m, "XXX");
+
+        var sum = defaultMoney + xxxMoney;
+
+        sum.Amount.Should().Be(5m);
+        sum.CurrencyCode.Should().Be("XXX");
+    }
+
+    [Fact]
+    public void DefaultStruct_ArithmeticWithDifferentCurrency_Throws()
+    {
+        var defaultMoney = default(Money);
+        var usd = new Money(10m, "USD");
+
+        var act = () => defaultMoney + usd;
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*different currencies: XXX and USD*");
     }
 
     [Fact]
@@ -92,19 +149,115 @@ public class MoneyTests
     }
 
     [Fact]
-    public void Multiplication_ByDecimalFactor_ReturnsProduct()
+    public void NegativeAmounts_AllowedForBalancesAndDebits()
+    {
+        var negative = new Money(-150.25m, "USD");
+
+        negative.Amount.Should().Be(-150.25m);
+        negative.ToString().Should().Be("-150.25 USD");
+    }
+
+    [Fact]
+    public void Multiplication_ByDecimalFactor_RoundsToFourDecimals()
     {
         var money = new Money(100m, "USD");
 
-        var result = money * 0.15m;
+        var result = money * 0.15555m;
 
-        result.Amount.Should().Be(15.0m);
+        // 100 * 0.15555 = 15.5550
+        result.Amount.Should().Be(15.555m);
+        result.CurrencyCode.Should().Be("USD");
+    }
+
+    [Fact]
+    public void Multiplication_FactorOnLeft_ReturnsProduct()
+    {
+        var money = new Money(50m, "USD");
+
+        var result = 2.5m * money;
+
+        result.Amount.Should().Be(125.0m);
+    }
+
+    [Fact]
+    public void Division_ByNonZero_RoundsToFourDecimalsBankersRounding()
+    {
+        var money = new Money(10m, "USD");
+
+        var result = money / 3m;
+
+        // 10 / 3 = 3.333333... rounded to 4 decimals = 3.3333
+        result.Amount.Should().Be(3.3333m);
+        result.CurrencyCode.Should().Be("USD");
+    }
+
+    [Fact]
+    public void Division_BankersRoundingContract()
+    {
+        // 0.00025 / 1 = 0.00025 -> rounds to even 0.0002 at 4th decimal
+        var m1 = new Money(0.00025m, "USD") / 1m;
+        m1.Amount.Should().Be(0.0002m);
+
+        // 0.00035 / 1 = 0.00035 -> rounds to even 0.0004 at 4th decimal
+        var m2 = new Money(0.00035m, "USD") / 1m;
+        m2.Amount.Should().Be(0.0004m);
+    }
+
+    [Fact]
+    public void Division_ByZero_ThrowsDivideByZeroException()
+    {
+        var money = new Money(100m, "USD");
+
+        var act = () => money / 0m;
+
+        act.Should().Throw<DivideByZeroException>()
+            .WithMessage("*Cannot divide Money by zero*");
+    }
+
+    [Fact]
+    public void Comparison_LessThan_SameCurrency_ReturnsExpected()
+    {
+        var lesser = new Money(10m, "USD");
+        var equalToLesser = new Money(10m, "USD");
+        var greater = new Money(20m, "USD");
+
+        (lesser < greater).Should().BeTrue();
+        (greater < lesser).Should().BeFalse();
+        (lesser <= equalToLesser).Should().BeTrue();
+        (lesser <= greater).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Comparison_GreaterThan_SameCurrency_ReturnsExpected()
+    {
+        var lesser = new Money(10m, "USD");
+        var greater = new Money(20m, "USD");
+        var equalToGreater = new Money(20m, "USD");
+
+        (greater > lesser).Should().BeTrue();
+        (lesser > greater).Should().BeFalse();
+        (greater >= equalToGreater).Should().BeTrue();
+        (greater >= lesser).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Comparison_DifferentCurrency_ThrowsInvalidOperationException()
+    {
+        var usd = new Money(10m, "USD");
+        var eur = new Money(10m, "EUR");
+
+        var act1 = () => usd < eur;
+        var act2 = () => usd > eur;
+        var act3 = () => usd.CompareTo(eur);
+
+        act1.Should().Throw<InvalidOperationException>().WithMessage("*different currencies*");
+        act2.Should().Throw<InvalidOperationException>().WithMessage("*different currencies*");
+        act3.Should().Throw<InvalidOperationException>().WithMessage("*different currencies*");
     }
 
     [Fact]
     public void Round_UsesBankersRounding()
     {
-        // Banker's rounding: 2.5 rounds to 2, 3.5 rounds to 4
         var money1 = new Money(2.5m, "USD");
         var money2 = new Money(3.5m, "USD");
 
@@ -120,6 +273,18 @@ public class MoneyTests
         var result = money.Round();
 
         result.Amount.Should().Be(10.12m);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(5)]
+    public void Round_InvalidDecimals_ThrowsArgumentOutOfRangeException(int decimals)
+    {
+        var money = new Money(10m, "USD");
+
+        var act = () => money.Round(decimals);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
@@ -176,7 +341,6 @@ public class MoneyTests
 
         var result = a + b;
 
-        // This is where float would fail (0.1 + 0.2 != 0.3 in floating point)
         result.Amount.Should().Be(0.3m);
     }
 
@@ -186,5 +350,16 @@ public class MoneyTests
         var money = new Money(999_999_999_999_999.9999m, "USD");
 
         money.Amount.Should().Be(999_999_999_999_999.9999m);
+    }
+
+    [Fact]
+    public void Overflow_AdditionExceedingDecimalMax_ThrowsOverflowException()
+    {
+        var max = new Money(decimal.MaxValue, "USD");
+        var one = new Money(1m, "USD");
+
+        var act = () => max + one;
+
+        act.Should().Throw<OverflowException>();
     }
 }

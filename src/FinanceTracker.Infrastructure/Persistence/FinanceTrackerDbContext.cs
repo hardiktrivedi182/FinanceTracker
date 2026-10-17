@@ -1,3 +1,4 @@
+using FinanceTracker.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Infrastructure.Persistence;
@@ -13,11 +14,14 @@ public class FinanceTrackerDbContext : DbContext
     {
     }
 
+    public DbSet<Household> Households => Set<Household>();
+    public DbSet<HouseholdMember> HouseholdMembers => Set<HouseholdMember>();
+    public DbSet<Account> Accounts => Set<Account>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // Entity configurations will be added here as entities are defined.
-        // Convention: use decimal(19,4) for all monetary columns.
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(FinanceTrackerDbContext).Assembly);
     }
 }

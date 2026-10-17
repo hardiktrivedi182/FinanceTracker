@@ -24,6 +24,16 @@ public class HealthCheckTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task ApiHealthEndpoint_ReturnsHealthy()
+    {
+        var response = await _client.GetAsync("/api/health");
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        var content = await response.Content.ReadAsStringAsync();
+        content.Should().Be("Healthy");
+    }
+
+    [Fact]
     public async Task SwaggerEndpoint_InDevelopment_ReturnsOk()
     {
         var response = await _client.GetAsync("/swagger/v1/swagger.json");
