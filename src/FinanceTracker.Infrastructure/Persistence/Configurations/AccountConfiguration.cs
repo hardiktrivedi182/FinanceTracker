@@ -65,5 +65,10 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
 
         builder.HasIndex(a => new { a.HouseholdId, a.Name });
         builder.HasIndex(a => new { a.HouseholdId, a.IsActive });
+
+        builder.HasMany(a => a.Valuations)
+            .WithOne(v => v.Account)
+            .HasForeignKey(v => v.AccountId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

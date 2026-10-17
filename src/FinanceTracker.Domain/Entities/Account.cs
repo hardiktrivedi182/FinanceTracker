@@ -55,6 +55,8 @@ public class Account
         IsActive = true;
     }
 
+    private readonly List<AccountValuation> _valuations = [];
+
     public Guid Id { get; private set; }
     public Guid HouseholdId { get; private set; }
     public string Name { get; private set; }
@@ -67,8 +69,85 @@ public class Account
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
-    // Navigation property
+    // Navigation properties
     public Household Household { get; private set; } = null!;
+    public IReadOnlyCollection<AccountValuation> Valuations => _valuations.AsReadOnly();
+
+    public AccountValuation? LatestValuation =>
+        _valuations.OrderByDescending(v => v.ValuationDate).ThenByDescending(v => v.CreatedAt).FirstOrDefault();
+
+    /// <summary>
+    /// Returns the latest valuation recorded on or before the specified date.
+    /// If multiple valuations exist on the same date, the most recently created one takes precedence.
+    /// Returns null if no valuation exists on or before the given date.
+    /// </summary>
+    public AccountValuation? GetValuationAsOf(DateOnly asOfDate) =>
+        _valuations
+            .Where(v => v.ValuationDate <= asOfDate)
+            .OrderByDescending(v => v.ValuationDate)
+            .ThenByDescending(v => v.CreatedAt)
+            .FirstOrDefault();
+
+    public AccountValuation AddValuation(
+        Guid valuationId,
+        DateOnly valuationDate,
+        decimal amount,
+        string currencyCode,
+        ValuationSourceType sourceType,
+        string? sourceReference,
+        string? notes,
+        string createdByUserId,
+        DateTimeOffset createdAt)
+    {
+        if (!string.Equals(CurrencyCode, currencyCode.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Valuation currency '{currencyCode}' must match account currency '{CurrencyCode}'.");
+        }
+
+        var valuation = new AccountValuation(
+            valuationId,
+            Id,
+            valuationDate,
+            amount,
+            currencyCode,
+            sourceType,
+            sourceReference,
+            notes,
+            createdByUserId,
+            createdAt);
+
+        _valuations.Add(valuation);
+        UpdatedAt = createdAt;
+
+        return valuation;
+    }
+
+    public AccountValuation UpdateValuation(
+        Guid valuationId,
+        decimal newAmount,
+        DateOnly newDate,
+        ValuationSourceType newSourceType,
+        string? newSourceReference,
+        string? newNotes,
+        string modifiedByUserId,
+        DateTimeOffset modifiedAt)
+    {
+        var valuation = _valuations.FirstOrDefault(v => v.Id == valuationId)
+            ?? throw new KeyNotFoundException($"Valuation '{valuationId}' was not found on account '{Id}'.");
+
+        valuation.Update(
+            newAmount,
+            newDate,
+            newSourceType,
+            newSourceReference,
+            newNotes,
+            modifiedByUserId,
+            modifiedAt);
+
+        UpdatedAt = modifiedAt;
+        return valuation;
+    }
 
     public void Update(
         string newName,

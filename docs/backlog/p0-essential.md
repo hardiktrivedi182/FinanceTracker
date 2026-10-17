@@ -1,227 +1,138 @@
-# FinanceTracker — P0 Essential Backlog (MVP)
+# FinanceTracker — P0 Essential Backlog (Reconciled MVP)
 
-> These are the **must-have** features for a usable Minimum Viable Product.
-> Items are ordered by recommended implementation sequence.
+> These are the **must-have** features for a production-ready Minimum Viable Product for a two-user household.
+> Items are ordered by architectural dependency and implementation sequence.
 
 ---
 
-## 1. Account Management ⭐ *Recommended First Vertical Slice*
+## 1. Household Security & Authorization Foundation ⭐ *Foundational Slice*
 
 > [!IMPORTANT]
-> **Start here.** This feature is the smallest end-to-end slice that exercises every
-> layer: React form → API endpoint → Application service → Domain entity →
-> EF Core persistence → Azure SQL. It establishes the full-stack pattern, project
-> structure, CI pipeline, and coding conventions that all subsequent features will follow.
+> Authentication and server-side household authorization must precede financial records.
+> Every protected operation must enforce access on the server; the frontend is never a security boundary.
 
-**Description:** CRUD operations for financial accounts (checking, savings, credit
-card, etc.). Users can create, view, edit, and deactivate accounts.
+**Description:** Provider-independent authentication context and household authorization handler. Establishes user identification, active household tenancy, and role-based / ownership-based access control.
 
 **Acceptance Criteria:**
+- [x] Server extracts authenticated user ID and household membership claims from security token / session cookie (`ICurrentUser`, `IHouseholdContext`).
+- [x] Requests without valid authentication return `401 Unauthorized` on protected endpoints.
+- [x] Requests attempting to access data outside the user's household return `403 Forbidden`.
+- [x] Local development and test authentication scheme enables seamless automated and manual testing without external cloud identity provider dependencies.
+- [x] ASP.NET Core Identity with secure HttpOnly cookies, account lockout (5 attempts / 15 min), and environment gating (DevAuth completely excluded in Production).
 
-- [ ] User can create an account with name, type, and currency code.
-- [ ] User can view a list of all active accounts.
-- [ ] User can edit an account's name and type.
-- [ ] User can deactivate an account (soft-deactivate via `IsActive` flag).
-- [ ] Server-side validation rejects invalid currency codes and empty names.
-
-**Layers:** Domain · Application · Infrastructure · API · Web
-
-**Complexity:** **S** — Simple CRUD, well-understood pattern.
+**Layers:** Application · Infrastructure · API · Tests  
+**Complexity:** **M**  
+**Status:** **Completed & Verified (16 API & Auth Security integration tests)**
 
 ---
 
-## 2. Statement Upload
+## 2. Account & Asset Management (CRUD)
 
-**Description:** Upload CSV, OFX, or PDF bank statement files. Files are validated
-(type, size) and stored in private Azure Blob Storage for later parsing.
+**Description:** Manage financial accounts and wealth holdings across all supported asset types (Bank Checking, Savings, Credit Card, Investment, Fixed Deposit, EPF, PPF, NPS, Loan, Other) with explicit Joint or Individual ownership.
 
 **Acceptance Criteria:**
+- [x] User can create, view, edit, and soft-deactivate financial accounts.
+- [x] Supports all core asset/liability categories: Checking, Savings, CreditCard, Investment, FixedDeposit, Epf, Ppf, Nps, Loan, Other.
+- [x] Individual accounts require a valid `OwnerUserId`; Joint accounts are shared across the household.
+- [x] Server-side validation enforces 3-letter ISO 4217 currency codes, non-empty names, and tenancy.
+- [x] Joint accounts can be modified by any household member; individual accounts can only be modified by their owner or household admin.
+- [x] React UI provides responsive account listing, creation/edit modals, ownership badges, and active/inactive filters.
 
-- [ ] User can upload a file via the web UI.
-- [ ] Only `.csv`, `.ofx`, and `.pdf` files are accepted; others are rejected with a clear error.
-- [ ] Files larger than 10 MB are rejected.
-- [ ] Uploaded file is stored in a private blob container and an `Import` record is created with status `Pending`.
-- [ ] Original file name is preserved in metadata.
-
-**Layers:** Application · Infrastructure (Blob Storage) · API · Web
-
-**Complexity:** **M** — File upload plumbing, blob integration, validation pipeline.
+**Layers:** Domain · Application · Infrastructure · API · Web  
+**Complexity:** **S**  
+**Status:** **Completed & Verified (65 Domain tests + 8 Application tests + 8 API tests)**
 
 ---
 
-## 3. Statement Parsing
+## 3. Dated Valuations & Asset Freshness
 
-**Description:** Parse uploaded statement files into raw transaction rows. Start
-with CSV; add OFX and PDF support later.
+**Description:** Record historical and current dated valuations for accounts and illiquid/retirement assets (e.g. EPF passbook balance, PPF credit, NPS NAV valuation, FD maturity value, bank closing balance).
 
 **Acceptance Criteria:**
+- [x] User can record a dated valuation (`ValuationDate`, `Amount`, `CurrencyCode`, `SourceType`, `Notes`, `SourceReference`).
+- [x] Valuation amount uses exact decimal arithmetic and enforces currency match with account.
+- [x] User can edit valuations with complete audit trail (`UpdatedByUserId`, `UpdatedAt`).
+- [x] View valuation history for an account sorted chronologically in UI and API.
+- [x] System identifies latest valuation and computes "staleness" (configurable threshold, default >90 days).
+- [x] Duplicate-date valuations resolve deterministically using creation timestamp ordering.
+- [x] Explain data coverage and valuation dates explicitly in the UI rather than assuming stale figures are current.
 
-- [ ] CSV parser extracts date, description, amount, and transaction type from uploaded files.
-- [ ] Parser handles common CSV variants (different delimiters, header rows, date formats).
-- [ ] Malformed rows are logged and skipped without aborting the entire import.
-- [ ] Import status transitions from `Pending` → `Processing` → `Completed` or `Failed`.
-
-**Layers:** Importing · Application · Domain
-
-**Complexity:** **M** — Parsing logic, error handling, format flexibility.
+**Layers:** Domain · Application · Infrastructure · API · Web  
+**Complexity:** **M**  
+**Status:** **Completed & Verified (Domain tests + Application tests + API tests)**
 
 ---
 
-## 4. Transaction Import
+## 4. Household & Individual Net Worth Reporting
 
-**Description:** Persist parsed transaction rows into the database with
-content-hash-based deduplication.
+**Description:** Calculate household consolidated net worth and permitted individual net worth breakdowns, categorizing assets vs liabilities and detailing asset allocation.
 
 **Acceptance Criteria:**
+- [x] Consolidated household net worth = Total Assets (Joint + Member 1 + Member 2) − Total Liabilities, strictly partitioned per currency (no silent conversion/mixing of currencies).
+- [x] Permitted individual net worth = Individual's personal accounts + 50% of joint accounts.
+- [x] Asset allocation breakdown per currency (by AccountType).
+- [x] Explicitly disclose valuation freshness/date and flag missing or stale valuations for every contributing balance.
+- [x] Historical comparison between two dates calculating absolute delta and percentage change per currency.
 
-- [ ] Each parsed row is hashed using SHA-256 of `(AccountId + Date + Description + Amount + CurrencyCode)`.
-- [ ] Rows with a hash that already exists for the same account are skipped and counted as duplicates.
-- [ ] `Import.RecordCount` and `Import.DuplicateCount` are updated accurately.
-- [ ] Re-uploading the same file produces zero new transactions.
-
-**Layers:** Importing · Application · Infrastructure · Domain
-
-**Complexity:** **M** — Deduplication logic, hash generation, batch insert.
+**Layers:** Domain · Application · API · Web  
+**Complexity:** **M**  
+**Status:** **Completed & Verified (NetWorthServiceTests + NetWorthEndpointTests)**
 
 ---
 
-## 5. Transaction List
+## 5. Statement Upload & Isolated File Parsing
 
-**Description:** View imported and manually entered transactions with filtering,
-sorting, and pagination.
+**Description:** Secure statement upload to private Azure Blob Storage and isolated parsing of financial statement files (CSV).
 
 **Acceptance Criteria:**
+- [ ] Validates MIME type, file extension (`.csv`, `.ofx`, `.pdf`), file size limit (10 MB), and file content.
+- [ ] File stored in private blob storage; original file name preserved in audit metadata.
+- [ ] Isolated parsing pipeline extracts dates, descriptions, amounts, and transaction directions.
+- [ ] Malformed records are captured with line numbers and descriptive error messages without crashing.
 
-- [ ] User can view a paginated list of transactions for a selected account.
-- [ ] User can filter transactions by date range.
-- [ ] User can search transactions by description text.
-- [ ] List displays date, description, amount, type (debit/credit), and category.
-- [ ] Default sort is by date descending.
-
-**Layers:** Application · Infrastructure · API · Web
-
-**Complexity:** **M** — Pagination, filtering, search query building.
+**Layers:** Infrastructure (Blob Storage) · Importing · Application · API · Web  
+**Complexity:** **M**
 
 ---
 
-## 6. Category Management
+## 6. Statement Import Preview, Ambiguity Detection & Dedup Commit
 
-**Description:** CRUD for transaction categories with optional parent-child
-hierarchy (e.g. "Food" → "Groceries", "Dining Out").
+**Description:** Two-stage import workflow: preview parsed records, detect duplicates, flag ambiguous rows, allow user review/reconciliation, and execute idempotent atomic commit.
 
 **Acceptance Criteria:**
+- [ ] Preview step shows parsed transactions before anything is committed to database.
+- [ ] Deduplication engine flags exact duplicates using SHA-256 fingerprinting.
+- [ ] Disambiguates legitimate identical transactions on the same day using sequence/reference indexes.
+- [ ] User can review warnings/duplicates and confirm the import.
+- [ ] Safe rollback and idempotent re-upload guarantee.
 
-- [ ] User can create a top-level category (e.g. "Housing").
-- [ ] User can create a sub-category under a parent (e.g. "Housing" → "Rent").
-- [ ] User can rename or delete a category.
-- [ ] Deleting a parent category prompts for handling of child categories.
-- [ ] Category names are unique within the same parent.
-
-**Layers:** Domain · Application · Infrastructure · API · Web
-
-**Complexity:** **S** — Simple CRUD with one self-referential FK.
+**Layers:** Importing · Application · Infrastructure · API · Web  
+**Complexity:** **L**
 
 ---
 
-## 7. Transaction Categorisation
+## 7. Categories & Transaction Management
 
-**Description:** Assign categories to transactions. Start with manual assignment;
-auto-categorisation (rules, ML) is a future enhancement.
+**Description:** Category hierarchy and transaction list view with filtering, search, sorting, and manual transaction entry.
 
 **Acceptance Criteria:**
+- [ ] User can create, rename, and organize categories with parent-child relationships.
+- [ ] Paginated transaction list with date range, account, and keyword search filters.
+- [ ] Single and bulk category assignment for transactions.
 
-- [ ] User can assign a category to a single transaction.
-- [ ] User can bulk-assign a category to multiple selected transactions.
-- [ ] User can remove a category assignment.
-- [ ] Categorised transactions display their category in the transaction list.
-
-**Layers:** Application · Infrastructure · API · Web
-
-**Complexity:** **S** — Update operation on existing transactions.
+**Layers:** Domain · Application · Infrastructure · API · Web  
+**Complexity:** **M**
 
 ---
 
-## 8. Dashboard
-
-**Description:** Summary view showing account balances, recent transactions, and
-basic spending overview.
-
-**Acceptance Criteria:**
-
-- [ ] Dashboard displays all active accounts with their current balances.
-- [ ] Dashboard shows the 10 most recent transactions across all accounts.
-- [ ] Dashboard shows total assets, total liabilities, and net worth.
-- [ ] Data refreshes when the user navigates to the dashboard.
-
-**Layers:** Application · Infrastructure · API · Web
-
-**Complexity:** **M** — Aggregation queries, multiple data sources, UI layout.
-
----
-
-## 9. User Authentication
-
-**Description:** Login and logout using ASP.NET Core Identity. Registration may be
-seed-only (no open registration for a household app).
-
-**Acceptance Criteria:**
-
-- [ ] User can log in with email and password.
-- [ ] User can log out; session is terminated.
-- [ ] Unauthenticated requests to protected endpoints return `401`.
-- [ ] Failed login attempts are rate-limited (lockout after 5 attempts).
-- [ ] Registration is either admin-seeded or behind an invite code (no open sign-up).
-
-**Layers:** Infrastructure (Identity) · API · Web
-
-**Complexity:** **M** — Identity setup, cookie/JWT configuration, login UI.
-
----
-
-## 10. Net Worth Calculation
-
-**Description:** Calculate net worth as total assets minus total liabilities,
-aggregated across all active accounts.
-
-**Acceptance Criteria:**
-
-- [ ] Assets = sum of balances in Checking, Savings, and Investment accounts.
-- [ ] Liabilities = sum of balances in CreditCard and Loan accounts.
-- [ ] Net worth = Assets − Liabilities.
-- [ ] Calculation uses the `Money` value object and respects currency codes.
-- [ ] Displayed on the dashboard (integrates with item 8).
-
-**Layers:** Domain · Application · API · Web
-
-**Complexity:** **S** — Aggregation query, value object arithmetic.
-
----
-
-## Summary
-
-| # | Feature | Complexity | Key Dependency |
-|---|---|---|---|
-| 1 | Account Management ⭐ | S | — (first slice) |
-| 2 | Statement Upload | M | Account Management |
-| 3 | Statement Parsing | M | Statement Upload |
-| 4 | Transaction Import | M | Statement Parsing |
-| 5 | Transaction List | M | Transaction Import |
-| 6 | Category Management | S | — (parallel track) |
-| 7 | Transaction Categorisation | S | Transaction List, Category Management |
-| 8 | Dashboard | M | Account Management, Transaction List |
-| 9 | User Authentication | M | — (can slot in at any point) |
-| 10 | Net Worth Calculation | S | Dashboard, Account Management |
+## Dependency Graph
 
 ```mermaid
-flowchart LR
-    A["1 Account Mgmt ⭐"] --> B["2 Statement Upload"]
-    B --> C["3 Statement Parsing"]
-    C --> D["4 Transaction Import"]
-    D --> E["5 Transaction List"]
-    E --> G["7 Categorisation"]
-    F["6 Category Mgmt"] --> G
-    A --> H["8 Dashboard"]
-    E --> H
-    H --> J["10 Net Worth"]
-    I["9 Authentication"]
+flowchart TD
+    S1["1 Household Auth Foundation ⭐"] --> S2["2 Account & Asset Mgmt (CRUD)"]
+    S2 --> S3["3 Dated Valuations & Freshness"]
+    S3 --> S4["4 Net Worth & Allocation Reporting"]
+    S2 --> S5["5 Statement Upload & Parsing"]
+    S5 --> S6["6 Import Preview & Dedup Commit"]
+    S6 --> S7["7 Categories & Transactions"]
 ```

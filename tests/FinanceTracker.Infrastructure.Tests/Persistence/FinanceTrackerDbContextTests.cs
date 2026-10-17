@@ -87,4 +87,61 @@ public class FinanceTrackerDbContextTests
             individual.OwnerUserId.Should().Be("user-partner-1");
         }
     }
+
+    [Fact]
+    public async Task CanPersistAndRetrieveAccountWithValuations()
+    {
+        var options = CreateNewContextOptions();
+        var householdId = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        await using (var context = new FinanceTrackerDbContext(options))
+        {
+            var household = new Household(householdId, "Valuation Test Household", now);
+            var account = new Account(
+                accountId,
+                householdId,
+                "PPF Investment",
+                AccountType.Ppf,
+                OwnershipType.Individual,
+                "user-1",
+                "INR",
+                "user-1",
+                now);
+
+            account.AddValuation(
+                Guid.NewGuid(),
+                today,
+                150000m,
+                "INR",
+                ValuationSourceType.Manual,
+                "Annual Statement",
+                "Initial balance",
+                "user-1",
+                now);
+
+            context.Households.Add(household);
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = new FinanceTrackerDbContext(options))
+        {
+            var retrieved = await context.Accounts
+                .Include(a => a.Valuations)
+                .FirstOrDefaultAsync(a => a.Id == accountId);
+
+            retrieved.Should().NotBeNull();
+            retrieved!.Valuations.Should().ContainSingle();
+            var valuation = retrieved.Valuations.First();
+            valuation.Amount.Should().Be(150000m);
+            valuation.CurrencyCode.Should().Be("INR");
+            valuation.SourceType.Should().Be(ValuationSourceType.Manual);
+            retrieved.LatestValuation.Should().NotBeNull();
+            retrieved.LatestValuation!.Amount.Should().Be(150000m);
+        }
+    }
 }
+
