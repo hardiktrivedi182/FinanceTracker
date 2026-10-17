@@ -1,0 +1,54 @@
+name: Infrastructure Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+
+jobs:
+  validate:
+    name: Validate Bicep Templates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Azure CLI is pre-installed on GitHub-hosted runners.
+      # We only use it for Bicep lint/build — no Azure login is needed.
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Lint Bicep templates
+        run: az bicep lint --file infra/main.bicep
+
+      - name: Build (compile to ARM)
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      # ---------------------------------------------------------------
+      # TODO: Add the following steps once GitHub OIDC federation is
+      # configured for this repository:
+      #
+      # 1. azure/login@v2 — authenticate via OIDC (no secrets)
+      #      with:
+      #        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      #
+      # 2. What-If (dry-run):
+      #      az deployment group what-if \
+      #        --resource-group <rg-name> \
+      #        --template-file infra/main.bicep \
+      #        --parameters infra/parameters/dev.bicepparam
+      #
+      # 3. Deploy (with environment protection / approval gate):
+      #      az deployment group create \
+      #        --resource-group <rg-name> \
+      #        --template-file infra/main.bicep \
+      #        --parameters infra/parameters/dev.bicepparam
+      # ---------------------------------------------------------------

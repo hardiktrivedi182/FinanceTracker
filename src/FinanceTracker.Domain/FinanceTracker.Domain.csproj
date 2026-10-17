@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>FinanceTracker.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

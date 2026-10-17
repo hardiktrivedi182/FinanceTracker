@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>FinanceTracker.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FinanceTracker.Domain\FinanceTracker.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

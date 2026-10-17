@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>FinanceTracker.Importing</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FinanceTracker.Domain\FinanceTracker.Domain.csproj" />
+    <ProjectReference Include="..\FinanceTracker.Application\FinanceTracker.Application.csproj" />
+  </ItemGroup>
+
+</Project>
