@@ -21,6 +21,7 @@ public class FinanceTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<HouseholdMember> HouseholdMembers => Set<HouseholdMember>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<AccountValuation> AccountValuations => Set<AccountValuation>();
+    public DbSet<Statement> Statements => Set<Statement>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

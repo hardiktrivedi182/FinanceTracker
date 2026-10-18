@@ -16,6 +16,9 @@ param location string
 @description('Deployment environment.')
 param environmentName string
 
+@description('Optional Managed Identity Principal ID to grant Storage Blob Data Contributor.')
+param managedIdentityPrincipalId string = ''
+
 // ── Storage Account ─────────────────────────────────────────────────────────
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -49,6 +52,20 @@ resource statementsContainer 'Microsoft.Storage/storageAccounts/blobServices/con
   name: 'statements'
   properties: {
     publicAccess: 'None'
+  }
+}
+
+// ── Role Assignment: Storage Blob Data Contributor ─────────────────────────
+// Grants the managed identity permission to read and write statement blobs.
+var storageBlobDataContributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+
+resource blobDataContributorRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(managedIdentityPrincipalId)) {
+  name: guid(storageAccount.id, managedIdentityPrincipalId, storageBlobDataContributorRoleDefinitionId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleDefinitionId
+    principalId: managedIdentityPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 

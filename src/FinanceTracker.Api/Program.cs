@@ -4,11 +4,17 @@ using FinanceTracker.Application.Accounts.Persistence;
 using FinanceTracker.Application.Accounts.Services;
 using FinanceTracker.Application.Common.Interfaces;
 using FinanceTracker.Application.NetWorth.Services;
+using FinanceTracker.Application.Statements.Parsing;
+using FinanceTracker.Application.Statements.Persistence;
+using FinanceTracker.Application.Statements.Services;
+using FinanceTracker.Application.Statements.Storage;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Enums;
+using FinanceTracker.Importing.Csv;
 using FinanceTracker.Infrastructure.Identity;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Infrastructure.Persistence.Repositories;
+using FinanceTracker.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +30,28 @@ builder.Services.AddScoped<IHouseholdContext, HouseholdContext>();
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<INetWorthService, NetWorthService>();
+builder.Services.AddScoped<IStatementRepository, StatementRepository>();
+builder.Services.AddScoped<ICsvStatementParser, CsvStatementParser>();
+builder.Services.AddScoped<IStatementService, StatementService>();
 builder.Services.AddSingleton(TimeProvider.System);
+
+// ─── Statement Storage Provider ──────────────────────────────────────────────
+builder.Services.Configure<LocalStorageOptions>(builder.Configuration.GetSection(LocalStorageOptions.SectionName));
+builder.Services.Configure<AzureBlobStorageOptions>(builder.Configuration.GetSection(AzureBlobStorageOptions.SectionName));
+
+var storageProvider = builder.Configuration["StatementStorage:Provider"] ?? "Local";
+if (string.Equals(storageProvider, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddScoped<IStatementStorage, AzureBlobStatementStorage>();
+}
+else
+{
+    if (builder.Environment.IsProduction())
+    {
+        throw new InvalidOperationException("Production environment requires AzureBlob statement storage. LocalStorage is not permitted in production.");
+    }
+    builder.Services.AddScoped<IStatementStorage, LocalStorageStatementStorage>();
+}
 
 // ─── Database ─────────────────────────────────────────────────────────────────
 // In-memory provider for development/testing only.
@@ -118,8 +145,8 @@ if (isDevelopment)
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-Token";
-    options.Cookie.Name = "XSRF-TOKEN";
-    options.Cookie.HttpOnly = false; // Must be readable by JavaScript to include in requests.
+    options.Cookie.Name = ".AspNetCore.Antiforgery";
+    options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = isDevelopment
         ? CookieSecurePolicy.SameAsRequest
@@ -220,6 +247,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
+app.UseMiddleware<CookieAntiforgeryMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");

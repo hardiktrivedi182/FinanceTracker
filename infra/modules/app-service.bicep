@@ -64,6 +64,14 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'ASPNETCORE_ENVIRONMENT'
           value: environmentName == 'prod' ? 'Production' : 'Development'
         }
+        {
+          name: 'StatementStorage__Provider'
+          value: 'AzureBlob'
+        }
+        {
+          name: 'StatementStorage__AzureBlob__ContainerName'
+          value: 'statements'
+        }
       ]
     }
   }

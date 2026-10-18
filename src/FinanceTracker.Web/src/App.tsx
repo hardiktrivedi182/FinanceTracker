@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { AccountManager } from './components/AccountManager'
+import { StatementUploader } from './components/StatementUploader'
 
 function App() {
   const [apiStatus, setApiStatus] = useState<string>('Checking...')
+  const [activeTab, setActiveTab] = useState<'accounts' | 'statements'>('accounts')
 
   useEffect(() => {
     fetch('/api/health')
@@ -24,8 +26,43 @@ function App() {
         </div>
       </header>
 
+      <nav style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+        <button
+          type="button"
+          data-testid="tab-accounts"
+          onClick={() => setActiveTab('accounts')}
+          style={{
+            background: activeTab === 'accounts' ? '#2563eb' : '#f1f5f9',
+            color: activeTab === 'accounts' ? '#fff' : '#475569',
+            border: 'none',
+            borderRadius: 6,
+            padding: '0.5rem 1rem',
+            cursor: 'pointer',
+            fontWeight: 500,
+          }}
+        >
+          Accounts &amp; Net Worth
+        </button>
+        <button
+          type="button"
+          data-testid="tab-statements"
+          onClick={() => setActiveTab('statements')}
+          style={{
+            background: activeTab === 'statements' ? '#2563eb' : '#f1f5f9',
+            color: activeTab === 'statements' ? '#fff' : '#475569',
+            border: 'none',
+            borderRadius: 6,
+            padding: '0.5rem 1rem',
+            cursor: 'pointer',
+            fontWeight: 500,
+          }}
+        >
+          Statement Upload &amp; Parsing
+        </button>
+      </nav>
+
       <main>
-        <AccountManager />
+        {activeTab === 'accounts' ? <AccountManager /> : <StatementUploader />}
       </main>
     </div>
   )

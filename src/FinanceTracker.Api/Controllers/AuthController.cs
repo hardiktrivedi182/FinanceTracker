@@ -16,19 +16,46 @@ public class AuthController : ControllerBase
     private readonly ICurrentUser _currentUser;
     private readonly IHouseholdContext _householdContext;
     private readonly IWebHostEnvironment _env;
+    private readonly Microsoft.AspNetCore.Antiforgery.IAntiforgery _antiforgery;
 
     public AuthController(
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         ICurrentUser currentUser,
         IHouseholdContext householdContext,
-        IWebHostEnvironment env)
+        IWebHostEnvironment env,
+        Microsoft.AspNetCore.Antiforgery.IAntiforgery antiforgery)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _currentUser = currentUser;
         _householdContext = householdContext;
         _env = env;
+        _antiforgery = antiforgery;
+    }
+
+    /// <summary>
+    /// Issues an antiforgery token pair: cookie token in internal cookie and request token
+    /// in XSRF-TOKEN cookie (readable by JavaScript) and JSON response.
+    /// </summary>
+    [HttpGet("csrf-token")]
+    [AllowAnonymous]
+    public IActionResult GetCsrfToken()
+    {
+        var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
+        SetXsrfCookie(tokens.RequestToken!);
+        return Ok(new { token = tokens.RequestToken });
+    }
+
+    private void SetXsrfCookie(string token)
+    {
+        Response.Cookies.Append("XSRF-TOKEN", token, new CookieOptions
+        {
+            HttpOnly = false,
+            SameSite = SameSiteMode.Strict,
+            Secure = !_env.IsDevelopment(),
+            Path = "/"
+        });
     }
 
     /// <summary>
@@ -86,6 +113,9 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid email or password." });
         }
 
+        var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
+        SetXsrfCookie(tokens.RequestToken!);
+
         return Ok(new
         {
             userId = user.Id,
@@ -103,6 +133,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout()
     {
         await _signInManager.SignOutAsync();
+        Response.Cookies.Delete("XSRF-TOKEN");
         if (_env.IsDevelopment())
         {
             Response.Cookies.Delete("dev_user_id");
@@ -143,6 +174,9 @@ public class AuthController : ControllerBase
         };
 
         Response.Cookies.Append("dev_user_id", request.UserId, cookieOptions);
+
+        var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
+        SetXsrfCookie(tokens.RequestToken!);
 
         return Ok(new
         {

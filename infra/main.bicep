@@ -57,6 +57,7 @@ module storage 'modules/storage.bicep' = {
     storageAccountName: storageAccountName
     location: location
     environmentName: environmentName
+    managedIdentityPrincipalId: identity.outputs.principalId
   }
 }
 

@@ -68,6 +68,11 @@ csharp_new_line_before_finally = true
 [tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
 
+[**/Migrations/**.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
+
+
 [*.{ts,tsx,js,jsx,json}]
 indent_size = 2
 
