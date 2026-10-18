@@ -105,6 +105,11 @@ public class Statement
         ErrorMessage = string.IsNullOrWhiteSpace(errorMessage) ? "Unknown error" : errorMessage.Trim();
     }
 
+    public void MarkCommitted()
+    {
+        Status = StatementProcessingStatus.Committed;
+    }
+
     public static string SanitizeFileName(string input)
     {
         if (string.IsNullOrWhiteSpace(input))

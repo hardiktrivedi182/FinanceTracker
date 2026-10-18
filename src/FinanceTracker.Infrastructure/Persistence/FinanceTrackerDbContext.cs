@@ -22,6 +22,9 @@ public class FinanceTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<AccountValuation> AccountValuations => Set<AccountValuation>();
     public DbSet<Statement> Statements => Set<Statement>();
+    public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
+    public DbSet<ImportStagingRow> ImportStagingRows => Set<ImportStagingRow>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

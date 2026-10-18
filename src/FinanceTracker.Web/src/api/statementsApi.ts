@@ -21,7 +21,7 @@ export async function ensureXsrfToken(): Promise<string | null> {
   return token
 }
 
-export async function uploadStatement(file: File): Promise<StatementUploadResultDto> {
+export async function uploadStatement(file: File, accountId?: string): Promise<StatementUploadResultDto> {
   const token = await ensureXsrfToken()
   const formData = new FormData()
   formData.append('file', file)
@@ -31,7 +31,8 @@ export async function uploadStatement(file: File): Promise<StatementUploadResult
     headers['X-XSRF-Token'] = token
   }
 
-  const res = await fetch('/api/statements/upload', {
+  const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''
+  const res = await fetch(`/api/statements/upload${query}`, {
     method: 'POST',
     credentials: 'include',
     headers,

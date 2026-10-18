@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from 'react'
+import { fetchAccounts } from '../api/accountsApi'
+import { createImportBatch, getImportBatch, getImportBatches } from '../api/importBatchesApi'
 import { fetchStatements, uploadStatement } from '../api/statementsApi'
+import type { AccountDto } from '../types/account'
+import type { ImportBatchDetailDto } from '../types/importBatch'
 import type { StatementSummaryDto, StatementUploadResultDto } from '../types/statement'
+import { ImportBatchReview } from './ImportBatchReview'
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 
 export const StatementUploader: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [targetAccountId, setTargetAccountId] = useState<string>('')
+  const [accounts, setAccounts] = useState<AccountDto[]>([])
   const [clientError, setClientError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState<boolean>(false)
   const [uploadResult, setUploadResult] = useState<StatementUploadResultDto | null>(null)
@@ -13,8 +20,13 @@ export const StatementUploader: React.FC = () => {
   const [statements, setStatements] = useState<StatementSummaryDto[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true)
 
+  // Active batch review view
+  const [activeBatchDetail, setActiveBatchDetail] = useState<ImportBatchDetailDto | null>(null)
+  const [isLoadingBatch, setIsLoadingBatch] = useState<boolean>(false)
+
   useEffect(() => {
     let ignore = false
+
     fetchStatements()
       .then((data) => {
         if (!ignore) setStatements(data)
@@ -24,6 +36,19 @@ export const StatementUploader: React.FC = () => {
       })
       .finally(() => {
         if (!ignore) setIsLoadingHistory(false)
+      })
+
+    fetchAccounts()
+      .then((accs) => {
+        if (!ignore) {
+          setAccounts(accs.filter((a) => a.isActive))
+          if (accs.length > 0) {
+            setTargetAccountId(accs[0].id)
+          }
+        }
+      })
+      .catch(() => {
+        // Ignore
       })
 
     return () => {
@@ -82,13 +107,46 @@ export const StatementUploader: React.FC = () => {
     setUploadResult(null)
 
     try {
-      const result = await uploadStatement(selectedFile)
+      const result = await uploadStatement(selectedFile, targetAccountId || undefined)
       setUploadResult(result)
       reloadHistory()
+
+      if (result.importBatchId) {
+        // Automatically load and open review if batch was initialized
+        setIsLoadingBatch(true)
+        const batch = await getImportBatch(result.importBatchId)
+        setActiveBatchDetail(batch)
+      }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Failed to upload statement.')
     } finally {
       setIsUploading(false)
+      setIsLoadingBatch(false)
+    }
+  }
+
+  const handleOpenReview = async (statementId: string) => {
+    if (!targetAccountId) {
+      setUploadError('Please select a target account to review and import this statement.')
+      return
+    }
+
+    setIsLoadingBatch(true)
+    setUploadError(null)
+    try {
+      // Check if an import batch already exists for this statement
+      const batches = await getImportBatches(statementId)
+      if (batches.length > 0) {
+        const detail = await getImportBatch(batches[0].id)
+        setActiveBatchDetail(detail)
+      } else {
+        const created = await createImportBatch(statementId, targetAccountId)
+        setActiveBatchDetail(created)
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Failed to launch import review.')
+    } finally {
+      setIsLoadingBatch(false)
     }
   }
 
@@ -97,6 +155,22 @@ export const StatementUploader: React.FC = () => {
     setUploadResult(null)
     setUploadError(null)
     setClientError(null)
+  }
+
+  // If currently in active review mode, render ImportBatchReview
+  if (activeBatchDetail) {
+    return (
+      <ImportBatchReview
+        batchDetail={activeBatchDetail}
+        onBack={() => {
+          setActiveBatchDetail(null)
+          reloadHistory()
+        }}
+        onCommitted={() => {
+          reloadHistory()
+        }}
+      />
+    )
   }
 
   return (
@@ -122,9 +196,36 @@ export const StatementUploader: React.FC = () => {
               type="file"
               accept=".csv,text/csv"
               onChange={handleFileChange}
-              disabled={isUploading}
+              disabled={isUploading || isLoadingBatch}
               style={{ display: 'block', width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: 6 }}
             />
+          </div>
+
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label htmlFor="target-account-select" style={{ display: 'block', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+              Target Account for Import:
+            </label>
+            {accounts.length === 0 ? (
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem' }}>
+                No active accounts found. Target account can be selected later during import review.
+              </p>
+            ) : (
+              <select
+                id="target-account-select"
+                data-testid="target-account-select"
+                value={targetAccountId}
+                onChange={(e) => setTargetAccountId(e.target.value)}
+                disabled={isUploading || isLoadingBatch}
+                style={{ display: 'block', width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: 6 }}
+              >
+                <option value="">-- Choose target account (optional) --</option>
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.accountType} — {acc.currencyCode})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {clientError && (
@@ -136,14 +237,14 @@ export const StatementUploader: React.FC = () => {
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <button
               type="submit"
-              disabled={!selectedFile || isUploading || Boolean(clientError)}
+              disabled={!selectedFile || isUploading || isLoadingBatch || Boolean(clientError)}
               style={{
-                background: !selectedFile || isUploading || Boolean(clientError) ? '#94a3b8' : '#2563eb',
+                background: !selectedFile || isUploading || isLoadingBatch || Boolean(clientError) ? '#94a3b8' : '#2563eb',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 6,
                 padding: '0.6rem 1.2rem',
-                cursor: !selectedFile || isUploading || Boolean(clientError) ? 'not-allowed' : 'pointer',
+                cursor: !selectedFile || isUploading || isLoadingBatch || Boolean(clientError) || accounts.length === 0 ? 'not-allowed' : 'pointer',
                 fontWeight: 500,
               }}
             >
@@ -154,14 +255,14 @@ export const StatementUploader: React.FC = () => {
               <button
                 type="button"
                 onClick={handleReset}
-                disabled={isUploading}
+                disabled={isUploading || isLoadingBatch}
                 style={{
                   background: '#f1f5f9',
                   color: '#475569',
                   border: '1px solid #cbd5e1',
                   borderRadius: 6,
                   padding: '0.6rem 1.2rem',
-                  cursor: isUploading ? 'not-allowed' : 'pointer',
+                  cursor: isUploading || isLoadingBatch ? 'not-allowed' : 'pointer',
                 }}
               >
                 Reset
@@ -170,9 +271,9 @@ export const StatementUploader: React.FC = () => {
           </div>
         </form>
 
-        {isUploading && (
+        {(isUploading || isLoadingBatch) && (
           <div data-testid="upload-loading-state" style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: 6, border: '1px dashed #cbd5e1', textAlign: 'center', color: '#64748b' }}>
-            Streaming statement securely and validating CSV structure...
+            {isUploading ? 'Streaming statement securely and validating CSV structure...' : 'Loading import review batch...'}
           </div>
         )}
 
@@ -212,6 +313,28 @@ export const StatementUploader: React.FC = () => {
                 <p style={{ margin: '0.5rem 0 0 0', fontWeight: 600, color: '#b91c1c', fontSize: '0.875rem' }}>
                   Error: {uploadResult.errorMessage}
                 </p>
+              )}
+
+              {uploadResult.status === 'Parsed' && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    data-testid="start-review-btn"
+                    onClick={() => handleOpenReview(uploadResult.statementId)}
+                    style={{
+                      background: '#16a34a',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '0.45rem 0.9rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Start Import Review &amp; Duplicate Check →
+                  </button>
+                </div>
               )}
             </div>
 
@@ -303,6 +426,7 @@ export const StatementUploader: React.FC = () => {
                   <th style={{ padding: '0.5rem' }}>Uploaded</th>
                   <th style={{ padding: '0.5rem' }}>Status</th>
                   <th style={{ padding: '0.5rem', textAlign: 'right' }}>Parsed Txns</th>
+                  <th style={{ padding: '0.5rem', textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -320,14 +444,69 @@ export const StatementUploader: React.FC = () => {
                           borderRadius: 4,
                           fontSize: '0.75rem',
                           fontWeight: 600,
-                          background: s.status === 'Parsed' ? '#dcfce7' : s.status === 'Failed' ? '#fee2e2' : '#fef3c7',
-                          color: s.status === 'Parsed' ? '#15803d' : s.status === 'Failed' ? '#b91c1c' : '#b45309',
+                          background:
+                            s.status === 'Committed'
+                              ? '#dcfce7'
+                              : s.status === 'Parsed'
+                              ? '#eff6ff'
+                              : s.status === 'Failed'
+                              ? '#fee2e2'
+                              : '#fef3c7',
+                          color:
+                            s.status === 'Committed'
+                              ? '#166534'
+                              : s.status === 'Parsed'
+                              ? '#1d4ed8'
+                              : s.status === 'Failed'
+                              ? '#b91c1c'
+                              : '#b45309',
                         }}
                       >
                         {s.status}
                       </span>
                     </td>
                     <td style={{ padding: '0.5rem', textAlign: 'right' }}>{s.parsedTransactionCount ?? '—'}</td>
+                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                      {s.status === 'Parsed' && (
+                        <button
+                          type="button"
+                          data-testid={`review-btn-${s.id}`}
+                          onClick={() => handleOpenReview(s.id)}
+                          disabled={isLoadingBatch}
+                          style={{
+                            background: '#2563eb',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 4,
+                            padding: '0.25rem 0.6rem',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                          }}
+                        >
+                          Review &amp; Import
+                        </button>
+                      )}
+                      {s.status === 'Committed' && (
+                        <button
+                          type="button"
+                          data-testid={`view-batch-btn-${s.id}`}
+                          onClick={() => handleOpenReview(s.id)}
+                          disabled={isLoadingBatch}
+                          style={{
+                            background: '#f1f5f9',
+                            color: '#475569',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: 4,
+                            padding: '0.25rem 0.6rem',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          View Batch
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

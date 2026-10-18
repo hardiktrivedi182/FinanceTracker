@@ -1,5 +1,5 @@
 export type StatementFormat = 'Csv'
-export type StatementProcessingStatus = 'Uploaded' | 'Parsing' | 'Parsed' | 'Failed'
+export type StatementProcessingStatus = 'Uploaded' | 'Parsing' | 'Parsed' | 'Failed' | 'Committed'
 
 export interface ParsedTransactionRowDto {
   rowNumber: number
@@ -24,6 +24,7 @@ export interface StatementUploadResultDto {
   sampleRows?: ParsedTransactionRowDto[] | null
   errors?: StatementParseErrorDto[] | null
   message: string
+  importBatchId?: string | null
 }
 
 export interface StatementSummaryDto {

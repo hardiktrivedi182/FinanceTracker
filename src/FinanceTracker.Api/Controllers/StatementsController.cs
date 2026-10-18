@@ -31,6 +31,7 @@ public class StatementsController : ControllerBase
     [RequestSizeLimit(MaxFileSizeBytes)]
     public async Task<ActionResult<StatementUploadResultDto>> UploadStatement(
         IFormFile? file,
+        [FromQuery] Guid? accountId = null,
         CancellationToken ct = default)
     {
         if (file == null || file.Length == 0)
@@ -50,6 +51,7 @@ public class StatementsController : ControllerBase
                 file.FileName,
                 file.Length,
                 stream,
+                accountId,
                 ct);
 
             return Ok(result);

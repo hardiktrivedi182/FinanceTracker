@@ -1,4 +1,5 @@
 using FinanceTracker.Application.Common.Interfaces;
+using FinanceTracker.Application.ImportBatches.Services;
 using FinanceTracker.Application.Statements.Dtos;
 using FinanceTracker.Application.Statements.Parsing;
 using FinanceTracker.Application.Statements.Persistence;
@@ -17,6 +18,7 @@ public class StatementService : IStatementService
     private readonly IHouseholdContext _householdContext;
     private readonly ICurrentUser _currentUser;
     private readonly TimeProvider _timeProvider;
+    private readonly IImportBatchService? _batchService;
 
     public StatementService(
         IStatementRepository statementRepository,
@@ -24,7 +26,8 @@ public class StatementService : IStatementService
         ICsvStatementParser csvParser,
         IHouseholdContext householdContext,
         ICurrentUser currentUser,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IImportBatchService? batchService = null)
     {
         _statementRepository = statementRepository;
         _statementStorage = statementStorage;
@@ -32,12 +35,14 @@ public class StatementService : IStatementService
         _householdContext = householdContext;
         _currentUser = currentUser;
         _timeProvider = timeProvider;
+        _batchService = batchService;
     }
 
     public async Task<StatementUploadResultDto> UploadAndParseAsync(
         string originalFileName,
         long fileSizeBytes,
         Stream fileContentStream,
+        Guid? accountId = null,
         CancellationToken ct = default)
     {
         if (!_currentUser.IsAuthenticated || string.IsNullOrWhiteSpace(_currentUser.UserId))
@@ -119,6 +124,13 @@ public class StatementService : IStatementService
             // 6. Persist Statement record to database
             await _statementRepository.AddAsync(statement, ct);
 
+            Guid? importBatchId = null;
+            if (accountId.HasValue && _batchService != null && statement.Status == StatementProcessingStatus.Parsed)
+            {
+                var batchDetail = await _batchService.CreateBatchAsync(statement.Id, accountId.Value, ct);
+                importBatchId = batchDetail.Batch.Id;
+            }
+
             // Sample rows: first 10 rows for safe preview
             var sampleRows = parseResult.Rows.Take(10).ToList();
 
@@ -132,7 +144,8 @@ public class StatementService : IStatementService
                 parseResult.Errors,
                 statement.Status == StatementProcessingStatus.Parsed
                     ? $"Statement parsed successfully ({parseResult.Rows.Count} transactions found). 0 transactions imported. Ledger mutation requires explicit import confirmation."
-                    : $"Statement processing completed with status '{statement.Status}'. 0 transactions imported.");
+                    : $"Statement processing completed with status '{statement.Status}'. 0 transactions imported.",
+                importBatchId);
         }
         catch (Exception)
         {

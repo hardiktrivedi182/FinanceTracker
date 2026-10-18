@@ -4,7 +4,19 @@ import { StatementUploader } from './StatementUploader'
 
 describe('StatementUploader Component', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn())
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString()
+      if (url.includes('/api/accounts')) {
+        return { ok: true, json: async () => [] } as Response
+      }
+      if (url.includes('/api/statements')) {
+        return { ok: true, json: async () => [] } as Response
+      }
+      if (url.includes('/api/auth/csrf-token')) {
+        return { ok: true, json: async () => ({ token: 'mock-csrf-token' }) } as Response
+      }
+      return { ok: true, json: async () => ({}) } as Response
+    }))
   })
 
   afterEach(() => {
@@ -12,11 +24,6 @@ describe('StatementUploader Component', () => {
   })
 
   it('renders upload form, visible 10 MB limit, and ledger non-mutation disclaimer', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
-
     render(<StatementUploader />)
 
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Upload Financial Statement')
@@ -30,11 +37,6 @@ describe('StatementUploader Component', () => {
   })
 
   it('validates empty file before upload', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
-
     render(<StatementUploader />)
 
     const fileInput = screen.getByLabelText(/Select CSV Statement/i)
@@ -47,11 +49,6 @@ describe('StatementUploader Component', () => {
   })
 
   it('validates non-CSV file extension before upload', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
-
     render(<StatementUploader />)
 
     const fileInput = screen.getByLabelText(/Select CSV Statement/i)
@@ -64,11 +61,6 @@ describe('StatementUploader Component', () => {
   })
 
   it('validates oversized file exceeding 10 MB before upload', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
-
     render(<StatementUploader />)
 
     const fileInput = screen.getByLabelText(/Select CSV Statement/i)
@@ -82,54 +74,56 @@ describe('StatementUploader Component', () => {
   })
 
   it('renders success state with sample transactions and non-import notice after upload', async () => {
-    // 1. Initial fetchStatements on mount
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
-
-    // 2. ensureXsrfToken
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token: 'mock-csrf-token' }),
-    } as Response)
-
-    // 3. uploadStatement
-    const mockUploadResult = {
-      statementId: 's-123',
-      originalFileName: 'bank-march.csv',
-      status: 'Parsed',
-      parsedTransactionCount: 2,
-      sampleRows: [
-        { rowNumber: 2, date: '2026-03-01', description: 'Grocery Market', amount: 85.5, direction: 'Debit', balance: 1400 },
-        { rowNumber: 3, date: '2026-03-02', description: 'Monthly Salary', amount: 3200, direction: 'Credit', balance: 4600 },
-      ],
-      errors: [],
-      message: 'Statement parsed successfully (2 transactions found). 0 transactions imported. Ledger mutation requires explicit import confirmation.',
-    }
-
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockUploadResult,
-    } as Response)
-
-    // 4. reloadHistory after upload
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
-        {
-          id: 's-123',
-          householdId: 'hh-1',
-          uploaderUserId: 'partner-1',
-          originalFileName: 'bank-march.csv',
-          format: 'Csv',
-          fileSizeBytes: 2048,
-          uploadedAt: '2026-03-15T10:00:00Z',
-          status: 'Parsed',
-          parsedTransactionCount: 2,
-        },
-      ],
-    } as Response)
+    let uploadCalled = false
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString()
+      if (url.includes('/api/accounts')) {
+        return { ok: true, json: async () => [] } as Response
+      }
+      if (url.includes('/api/auth/csrf-token')) {
+        return { ok: true, json: async () => ({ token: 'mock-csrf-token' }) } as Response
+      }
+      if (url.includes('/api/statements/upload')) {
+        uploadCalled = true
+        return {
+          ok: true,
+          json: async () => ({
+            statementId: 's-123',
+            originalFileName: 'bank-march.csv',
+            status: 'Parsed',
+            parsedTransactionCount: 2,
+            sampleRows: [
+              { rowNumber: 2, date: '2026-03-01', description: 'Grocery Market', amount: 85.5, direction: 'Debit', balance: 1400 },
+              { rowNumber: 3, date: '2026-03-02', description: 'Monthly Salary', amount: 3200, direction: 'Credit', balance: 4600 },
+            ],
+            errors: [],
+            message: 'Statement parsed successfully (2 transactions found). 0 transactions imported. Ledger mutation requires explicit import confirmation.',
+          }),
+        } as Response
+      }
+      if (url.includes('/api/statements')) {
+        if (uploadCalled) {
+          return {
+            ok: true,
+            json: async () => [
+              {
+                id: 's-123',
+                householdId: 'hh-1',
+                uploaderUserId: 'partner-1',
+                originalFileName: 'bank-march.csv',
+                format: 'Csv',
+                fileSizeBytes: 2048,
+                uploadedAt: '2026-03-15T10:00:00Z',
+                status: 'Parsed',
+                parsedTransactionCount: 2,
+              },
+            ],
+          } as Response
+        }
+        return { ok: true, json: async () => [] } as Response
+      }
+      return { ok: true, json: async () => ({}) } as Response
+    })
 
     render(<StatementUploader />)
 
@@ -152,38 +146,36 @@ describe('StatementUploader Component', () => {
   })
 
   it('renders parse errors when uploaded CSV is malformed', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
-
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token: 'mock-csrf-token' }),
-    } as Response)
-
-    const mockFailedResult = {
-      statementId: 's-999',
-      originalFileName: 'bad.csv',
-      status: 'Failed',
-      parsedTransactionCount: 0,
-      errorMessage: 'CSV parsing failed.',
-      sampleRows: [],
-      errors: [
-        { rowNumber: 2, message: 'Ambiguous debit/credit: row contains both debit (50) and credit (50) amounts.' },
-      ],
-      message: "Statement processing completed with status 'Failed'. 0 transactions imported.",
-    }
-
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockFailedResult,
-    } as Response)
-
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString()
+      if (url.includes('/api/accounts')) {
+        return { ok: true, json: async () => [] } as Response
+      }
+      if (url.includes('/api/auth/csrf-token')) {
+        return { ok: true, json: async () => ({ token: 'mock-csrf-token' }) } as Response
+      }
+      if (url.includes('/api/statements/upload')) {
+        return {
+          ok: true,
+          json: async () => ({
+            statementId: 's-999',
+            originalFileName: 'bad.csv',
+            status: 'Failed',
+            parsedTransactionCount: 0,
+            errorMessage: 'CSV parsing failed.',
+            sampleRows: [],
+            errors: [
+              { rowNumber: 2, message: 'Ambiguous debit/credit: row contains both debit (50) and credit (50) amounts.' },
+            ],
+            message: "Statement processing completed with status 'Failed'. 0 transactions imported.",
+          }),
+        } as Response
+      }
+      if (url.includes('/api/statements')) {
+        return { ok: true, json: async () => [] } as Response
+      }
+      return { ok: true, json: async () => ({}) } as Response
+    })
 
     render(<StatementUploader />)
 

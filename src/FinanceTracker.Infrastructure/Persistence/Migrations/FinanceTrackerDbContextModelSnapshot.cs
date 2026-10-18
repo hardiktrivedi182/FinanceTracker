@@ -207,6 +207,227 @@ namespace FinanceTracker.Infrastructure.Persistence.Migrations
                     b.ToTable("household_members", (string)null);
                 });
 
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.ImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTimeOffset?>("CommittedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("committed_at");
+
+                    b.Property<string>("CommittedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)")
+                        .HasColumnName("committed_by_user_id");
+
+                    b.Property<int?>("CommittedCount")
+                        .HasColumnType("int")
+                        .HasColumnName("committed_count");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DuplicateCount")
+                        .HasColumnType("int")
+                        .HasColumnName("duplicate_count");
+
+                    b.Property<int>("ErrorCount")
+                        .HasColumnType("int")
+                        .HasColumnName("error_count");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("household_id");
+
+                    b.Property<int>("ReadyCount")
+                        .HasColumnType("int")
+                        .HasColumnName("ready_count");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("row_version");
+
+                    b.Property<int>("SelectedRowCount")
+                        .HasColumnType("int")
+                        .HasColumnName("selected_row_count");
+
+                    b.Property<Guid>("StatementId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("statement_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TotalRowCount")
+                        .HasColumnType("int")
+                        .HasColumnName("total_row_count");
+
+                    b.Property<string>("UploadedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)")
+                        .HasColumnName("uploaded_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_import_batches_account_id");
+
+                    b.HasIndex("StatementId")
+                        .HasDatabaseName("ix_import_batches_statement_id");
+
+                    b.HasIndex("HouseholdId", "CreatedAt")
+                        .HasDatabaseName("ix_import_batches_household_created_at");
+
+                    b.ToTable("import_batches", (string)null);
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.ImportStagingRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("Amount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid?>("CommittedTransactionId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("committed_transaction_id");
+
+                    b.Property<string>("CurrencyCode")
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("DuplicateReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("duplicate_reason");
+
+                    b.Property<string>("DuplicateStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("duplicate_status");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("fingerprint");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("household_id");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("import_batch_id");
+
+                    b.Property<bool>("IsSelected")
+                        .HasColumnType("bit")
+                        .HasColumnName("is_selected");
+
+                    b.Property<Guid?>("MatchedTransactionId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("matched_transaction_id");
+
+                    b.Property<string>("RawData")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("raw_data");
+
+                    b.Property<string>("Resolution")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("resolution");
+
+                    b.Property<string>("ResolutionNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("resolution_notes");
+
+                    b.Property<decimal?>("ResolvedAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasColumnName("resolved_amount");
+
+                    b.Property<string>("ResolvedDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("resolved_description");
+
+                    b.Property<DateOnly?>("ResolvedTransactionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("resolved_transaction_date");
+
+                    b.Property<string>("ResolvedType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("resolved_type");
+
+                    b.Property<int>("SourceRowNumber")
+                        .HasColumnType("int")
+                        .HasColumnName("source_row_number");
+
+                    b.Property<DateOnly?>("TransactionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("transaction_date");
+
+                    b.Property<string>("Type")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("type");
+
+                    b.Property<string>("ValidationErrors")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("validation_errors");
+
+                    b.Property<string>("ValidationStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("validation_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Fingerprint")
+                        .HasDatabaseName("ix_import_staging_rows_fingerprint");
+
+                    b.HasIndex("HouseholdId", "ImportBatchId")
+                        .HasDatabaseName("ix_import_staging_rows_household_batch");
+
+                    b.HasIndex("ImportBatchId", "SourceRowNumber")
+                        .HasDatabaseName("ix_import_staging_rows_batch_row_number");
+
+                    b.ToTable("import_staging_rows", (string)null);
+                });
+
             modelBuilder.Entity("FinanceTracker.Domain.Entities.Statement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -275,6 +496,102 @@ namespace FinanceTracker.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_statements_household_uploaded_at");
 
                     b.ToTable("statements", (string)null);
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.Transaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("account_id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("fingerprint");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("household_id");
+
+                    b.Property<Guid?>("ImportBatchId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("import_batch_id");
+
+                    b.Property<DateOnly>("OriginalTransactionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("original_transaction_date");
+
+                    b.Property<decimal>("SignedAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasColumnName("signed_amount");
+
+                    b.Property<int?>("SourceRowNumber")
+                        .HasColumnType("int")
+                        .HasColumnName("source_row_number");
+
+                    b.Property<Guid?>("StatementId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("statement_id");
+
+                    b.Property<DateOnly>("TransactionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("transaction_date");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportBatchId")
+                        .HasDatabaseName("ix_transactions_import_batch_id");
+
+                    b.HasIndex("StatementId")
+                        .HasDatabaseName("ix_transactions_statement_id");
+
+                    b.HasIndex("AccountId", "Fingerprint")
+                        .HasDatabaseName("ix_transactions_account_fingerprint");
+
+                    b.HasIndex("HouseholdId", "AccountId", "TransactionDate")
+                        .HasDatabaseName("ix_transactions_household_account_date");
+
+                    b.ToTable("transactions", (string)null);
                 });
 
             modelBuilder.Entity("FinanceTracker.Infrastructure.Identity.ApplicationUser", b =>
@@ -514,6 +831,44 @@ namespace FinanceTracker.Infrastructure.Persistence.Migrations
                     b.Navigation("Household");
                 });
 
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.ImportBatch", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FinanceTracker.Domain.Entities.Household", "Household")
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FinanceTracker.Domain.Entities.Statement", "Statement")
+                        .WithMany()
+                        .HasForeignKey("StatementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Household");
+
+                    b.Navigation("Statement");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.ImportStagingRow", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.ImportBatch", "ImportBatch")
+                        .WithMany("Rows")
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ImportBatch");
+                });
+
             modelBuilder.Entity("FinanceTracker.Domain.Entities.Statement", b =>
                 {
                     b.HasOne("FinanceTracker.Domain.Entities.Household", null)
@@ -521,6 +876,39 @@ namespace FinanceTracker.Infrastructure.Persistence.Migrations
                         .HasForeignKey("HouseholdId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.Transaction", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FinanceTracker.Domain.Entities.Household", "Household")
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FinanceTracker.Domain.Entities.ImportBatch", "ImportBatch")
+                        .WithMany()
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("FinanceTracker.Domain.Entities.Statement", "Statement")
+                        .WithMany()
+                        .HasForeignKey("StatementId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Household");
+
+                    b.Navigation("ImportBatch");
+
+                    b.Navigation("Statement");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -584,6 +972,11 @@ namespace FinanceTracker.Infrastructure.Persistence.Migrations
                     b.Navigation("Accounts");
 
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.ImportBatch", b =>
+                {
+                    b.Navigation("Rows");
                 });
 #pragma warning restore 612, 618
         }

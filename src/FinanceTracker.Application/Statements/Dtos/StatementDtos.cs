@@ -34,4 +34,5 @@ public record StatementUploadResultDto(
     string? ErrorMessage,
     IReadOnlyList<ParsedTransactionRowDto>? SampleRows,
     IReadOnlyList<StatementParseErrorDto>? Errors,
-    string Message = "Statement uploaded and parsed. No transactions were imported into the ledger.");
+    string Message = "Statement uploaded and parsed. No transactions were imported into the ledger.",
+    Guid? ImportBatchId = null);

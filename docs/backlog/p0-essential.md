@@ -121,16 +121,28 @@
 
 ## 6. Statement Import Preview, Ambiguity Detection & Dedup Commit
 
-**Description:** Two-stage import workflow: preview parsed records, detect duplicates, flag ambiguous rows, allow user review/reconciliation, and execute idempotent atomic commit.
+**Description:** Two-stage import workflow: persist parsed records as reviewable import batches and staging rows, detect duplicates against both the target account and the batch itself, flag ambiguous rows, allow user reconciliation/exclusion, and execute an explicit, idempotent, atomic ledger commit.
 
 **Acceptance Criteria:**
-- [ ] Preview step shows parsed transactions before anything is committed to database.
-- [ ] Deduplication engine flags exact duplicates using SHA-256 fingerprinting.
-- [ ] Disambiguates legitimate identical transactions on the same day using sequence/reference indexes.
-- [ ] User can review warnings/duplicates and confirm the import.
-- [ ] Safe rollback and idempotent re-upload guarantee.
+- [x] Parsing and previewing never mutate the ledger; transactions are only persisted on explicit user confirmation.
+- [x] Staged candidate transactions preserve original source row numbers, parsed values, diagnostics, duplicate flags, and user resolutions.
+- [x] Canonical SHA-256 fingerprinting detects possible duplicates (`account_id`, `date`, normalized `description`, `amount`, `type`, `currency`).
+- [x] Duplicates and errors are flagged for user review and are never silently discarded or committed.
+- [x] User can edit row values, approve duplicates as-is, exclude unwanted rows, and select eligible transactions.
+- [x] Multi-tab frontend review interface with KPI counters, filter tabs, edit modal, and permanent ledger warning.
+- [x] Server-side revalidation of eligibility, household authorization, account ownership, and duplicate state at commit time.
+- [x] Atomic EF Core transaction execution committing ledger records and batch status in a single boundary.
+- [x] Idempotent commit handling: repeated commit requests safely return committed counts without duplicating ledger rows.
 
-**Layers:** Importing · Application · Infrastructure · API · Web  
+**Amount-Sign Convention & Currency Semantics:**
+- `Amount` is strictly non-negative (`decimal(19,4)`).
+- `Type` is `TransactionType.Debit` or `TransactionType.Credit`.
+- `SignedAmount` follows standard financial accounting: Credits are positive (`+Amount`), Debits are negative (`-Amount`).
+- Currencies are determined by the target account's ISO 4217 currency code.
+- Imported transactions do not alter `AccountValuation` or account balance entities.
+
+**Status:** **Completed & Verified (177 backend tests + 13 frontend tests)**
+**Layers:** Domain · Importing · Application · Infrastructure (Migrations & Repositories) · API · Web · Tests  
 **Complexity:** **L**
 
 ---
