@@ -116,11 +116,16 @@ public class AuthController : ControllerBase
         var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
         SetXsrfCookie(tokens.RequestToken!);
 
+        var claims = await _userManager.GetClaimsAsync(user);
+        var role = claims.FirstOrDefault(c => c.Type == "household_role")?.Value ?? "Member";
+
         return Ok(new
         {
             userId = user.Id,
             email = user.Email,
+            displayName = user.DisplayName,
             householdId = user.HouseholdId,
+            householdRole = role,
             message = "Signed in successfully.",
         });
     }
@@ -178,10 +183,21 @@ public class AuthController : ControllerBase
         var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
         SetXsrfCookie(tokens.RequestToken!);
 
+        var devRole = request.UserId.Equals("partner-1", StringComparison.OrdinalIgnoreCase) ? "Admin" : "Member";
+        var devEmail = request.UserId.Equals("partner-1", StringComparison.OrdinalIgnoreCase)
+            ? "partner1@household.local"
+            : "partner2@household.local";
+        var devDisplayName = request.UserId.Equals("partner-1", StringComparison.OrdinalIgnoreCase)
+            ? "Partner 1"
+            : "Partner 2";
+
         return Ok(new
         {
             userId = request.UserId,
+            email = devEmail,
+            displayName = devDisplayName,
             householdId = HouseholdContext.DefaultHouseholdId,
+            householdRole = devRole,
             message = $"Dev session started as '{request.UserId}'.",
         });
     }

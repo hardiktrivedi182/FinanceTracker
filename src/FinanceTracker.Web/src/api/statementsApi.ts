@@ -1,25 +1,6 @@
 import type { StatementSummaryDto, StatementUploadResultDto } from '../types/statement'
-
-function getXsrfToken(): string | null {
-  const match = document.cookie.match(/(^|;)\s*XSRF-TOKEN\s*=\s*([^;]+)/)
-  return match ? decodeURIComponent(match[2]) : null
-}
-
-export async function ensureXsrfToken(): Promise<string | null> {
-  let token = getXsrfToken()
-  if (!token) {
-    try {
-      const res = await fetch('/api/auth/csrf-token', { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
-        token = data.token
-      }
-    } catch {
-      // Ignored: Best effort retrieval
-    }
-  }
-  return token
-}
+import { ensureXsrfToken } from './authApi'
+export { ensureXsrfToken }
 
 export async function uploadStatement(file: File, accountId?: string): Promise<StatementUploadResultDto> {
   const token = await ensureXsrfToken()

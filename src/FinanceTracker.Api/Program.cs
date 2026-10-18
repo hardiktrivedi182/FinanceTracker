@@ -103,7 +103,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.SameSite = SameSiteMode.Strict;
     // Require HTTPS except in local development.
     options.Cookie.SecurePolicy = isDevelopment
-        ? CookieSecurePolicy.SameAsRequest
+        ? CookieSecurePolicy.None
         : CookieSecurePolicy.Always;
     options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromMinutes(60);
@@ -158,7 +158,7 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = isDevelopment
-        ? CookieSecurePolicy.SameAsRequest
+        ? CookieSecurePolicy.None
         : CookieSecurePolicy.Always;
 });
 

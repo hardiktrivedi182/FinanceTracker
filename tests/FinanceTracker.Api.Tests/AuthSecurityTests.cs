@@ -150,5 +150,63 @@ public class AuthSecurityTests : IClassFixture<WebApplicationFactory<Program>>
         var cookies = logoutResponse.Headers.GetValues("Set-Cookie");
         cookies.Should().Contain(c => c.Contains("dev_user_id="));
     }
+
+    [Theory]
+    [InlineData("partner1@household.local", "Password123!", "partner-1", "Admin")]
+    [InlineData("partner2@household.local", "Password123!", "partner-2", "Member")]
+    public async Task Login_BothHouseholdIdentities_AuthenticateAndSessionPersistsInMeEndpoint(
+        string email, string password, string expectedUserId, string expectedRole)
+    {
+        var client = _factory.CreateClient();
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, password));
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var cookies = loginResponse.Headers.GetValues("Set-Cookie").ToList();
+        var authCookie = cookies.First(c => c.StartsWith("ft_auth=", StringComparison.Ordinal)).Split(';')[0];
+
+        // Call /api/auth/me with auth cookie to simulate page refresh / session restoration
+        var meRequest = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        meRequest.Headers.Add("Cookie", authCookie);
+
+        var meResponse = await client.SendAsync(meRequest);
+        meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await meResponse.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("isAuthenticated").GetBoolean().Should().BeTrue();
+        body.GetProperty("userId").GetString().Should().Be(expectedUserId);
+        body.GetProperty("householdRole").GetString().Should().Be(expectedRole);
+    }
+
+    [Fact]
+    public async Task Logout_ClearsSession_AndMeEndpointReturnsUnauthenticated()
+    {
+        var client = _factory.CreateClient();
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("partner1@household.local", "Password123!"));
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var cookies = loginResponse.Headers.GetValues("Set-Cookie").ToList();
+        var authCookie = cookies.First(c => c.StartsWith("ft_auth=", StringComparison.Ordinal)).Split(';')[0];
+
+        // Sign out
+        var logoutReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        logoutReq.Headers.Add("Cookie", authCookie);
+        var logoutResponse = await client.SendAsync(logoutReq);
+        logoutResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Check expired cookie returned in response
+        logoutResponse.Headers.Should().ContainKey("Set-Cookie");
+        var logoutCookies = logoutResponse.Headers.GetValues("Set-Cookie").ToList();
+        logoutCookies.Should().Contain(c => c.Contains("ft_auth="));
+
+        // Attempting to use the expired cookie on /api/auth/me returns unauthenticated
+        var expiredAuthCookie = logoutCookies.First(c => c.Contains("ft_auth=")).Split(';')[0];
+        var meRequest = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        meRequest.Headers.Add("Cookie", expiredAuthCookie);
+
+        var meResponse = await client.SendAsync(meRequest);
+        meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var meBody = await meResponse.Content.ReadFromJsonAsync<JsonElement>();
+        meBody.GetProperty("isAuthenticated").GetBoolean().Should().BeFalse();
+    }
 }
 

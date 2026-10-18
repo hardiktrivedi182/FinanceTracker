@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FinanceTracker.Domain.Enums;
 
 namespace FinanceTracker.Application.NetWorth.Dtos;
@@ -25,7 +26,7 @@ public record HouseholdOwnershipBreakdownDto(
     decimal Partner2TotalShare);
 
 public record AssetAllocationItemDto(
-    AccountType AccountType,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] AccountType AccountType,
     string AccountTypeName,
     decimal TotalAmount,
     decimal Percentage);
@@ -33,8 +34,8 @@ public record AssetAllocationItemDto(
 public record AccountNetWorthItemDto(
     Guid AccountId,
     string AccountName,
-    AccountType AccountType,
-    OwnershipType OwnershipType,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] AccountType AccountType,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] OwnershipType OwnershipType,
     string? OwnerUserId,
     bool IsLiability,
     DateOnly? ValuationDate,

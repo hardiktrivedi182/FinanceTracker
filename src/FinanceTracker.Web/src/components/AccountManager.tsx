@@ -18,9 +18,16 @@ import {
   fetchNetWorth,
 } from '../api/accountsApi'
 
+import { devLogin } from '../api/authApi'
+
 const getTodayIsoDate = () => new Date().toISOString().split('T')[0]
 
-export function AccountManager() {
+export interface AccountManagerProps {
+  currentUserId?: string
+  onUserSwitched?: (userId: string) => void
+}
+
+export function AccountManager({ currentUserId, onUserSwitched }: AccountManagerProps = {}) {
   const [accounts, setAccounts] = useState<AccountDto[]>([])
   const [netWorthReport, setNetWorthReport] = useState<HouseholdNetWorthReportDto | null>(null)
   const [asOfDate, setAsOfDate] = useState<string>(getTodayIsoDate)
@@ -61,7 +68,7 @@ export function AccountManager() {
   const [editSourceRef, setEditSourceRef] = useState<string>('')
 
   // Dev user state
-  const [currentUser, setCurrentUser] = useState<string>('partner-1')
+  const [currentUser, setCurrentUser] = useState<string>(() => currentUserId || 'partner-1')
 
   const loadData = useCallback(async () => {
     try {
@@ -112,12 +119,10 @@ export function AccountManager() {
 
   const handleDevUserSwitch = async (userId: string) => {
     try {
-      await fetch('/api/auth/dev-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      })
+      await devLogin(userId)
       setCurrentUser(userId)
+      onUserSwitched?.(userId)
+      await loadData()
     } catch {
       setCurrentUser(userId)
     }
@@ -133,7 +138,13 @@ export function AccountManager() {
         return
       }
 
-      await createAccount({ ...formData, currencyCode: currency })
+      const payload: CreateAccountRequest = {
+        ...formData,
+        currencyCode: currency,
+        ownerUserId: formData.ownershipType === 'Individual' ? (formData.ownerUserId || currentUser) : null,
+      }
+
+      await createAccount(payload)
       setShowAddModal(false)
       setFormData({
         name: '',
@@ -232,29 +243,31 @@ export function AccountManager() {
 
   return (
     <div className="account-manager" style={{ marginTop: '1.5rem' }}>
-      {/* User Switcher bar for Household Context */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eef2f6', padding: '0.75rem 1rem', borderRadius: 8, marginBottom: '1.5rem' }}>
-        <div>
-          <strong>Household Context:</strong> Two-User Household (Partner 1 &amp; Partner 2)
+      {/* User Switcher bar for Household Context - strictly development only */}
+      {Boolean(import.meta.env.DEV) && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eef2f6', padding: '0.75rem 1rem', borderRadius: 8, marginBottom: '1.5rem' }}>
+          <div>
+            <strong>Household Context:</strong> Two-User Household (Partner 1 &amp; Partner 2)
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>Active User:</span>
+            <button
+              type="button"
+              style={{ fontWeight: currentUser === 'partner-1' ? 'bold' : 'normal', background: currentUser === 'partner-1' ? '#2563eb' : '#fff', color: currentUser === 'partner-1' ? '#fff' : '#000', border: '1px solid #ccc', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
+              onClick={() => handleDevUserSwitch('partner-1')}
+            >
+              Partner 1 (Admin)
+            </button>
+            <button
+              type="button"
+              style={{ fontWeight: currentUser === 'partner-2' ? 'bold' : 'normal', background: currentUser === 'partner-2' ? '#2563eb' : '#fff', color: currentUser === 'partner-2' ? '#fff' : '#000', border: '1px solid #ccc', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
+              onClick={() => handleDevUserSwitch('partner-2')}
+            >
+              Partner 2 (Member)
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span>Active User:</span>
-          <button
-            type="button"
-            style={{ fontWeight: currentUser === 'partner-1' ? 'bold' : 'normal', background: currentUser === 'partner-1' ? '#2563eb' : '#fff', color: currentUser === 'partner-1' ? '#fff' : '#000', border: '1px solid #ccc', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
-            onClick={() => handleDevUserSwitch('partner-1')}
-          >
-            Partner 1 (Admin)
-          </button>
-          <button
-            type="button"
-            style={{ fontWeight: currentUser === 'partner-2' ? 'bold' : 'normal', background: currentUser === 'partner-2' ? '#2563eb' : '#fff', color: currentUser === 'partner-2' ? '#fff' : '#000', border: '1px solid #ccc', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
-            onClick={() => handleDevUserSwitch('partner-2')}
-          >
-            Partner 2 (Member)
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* As-Of Date Control & Staleness Indicator */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
