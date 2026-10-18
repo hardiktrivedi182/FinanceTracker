@@ -338,4 +338,291 @@ public class ImportBatchServiceTests
         await _batchRepo.DidNotReceiveWithAnyArgs()
             .CommitBatchAtomicAsync(default!, default!, default!, default);
     }
+
+    [Fact]
+    public async Task CreateBatchAsync_WhenIndividualAccount_NonOwnerNonAdmin_ThrowsUnauthorizedAccessException()
+    {
+        var individualAccountId = Guid.NewGuid();
+        var individualAccount = new Account(
+            individualAccountId,
+            _householdId,
+            "Partner 2 Personal",
+            AccountType.Checking,
+            OwnershipType.Individual,
+            "partner-2",
+            "USD",
+            "partner-2",
+            _now);
+
+        _accountRepo.GetByIdAsync(_householdId, individualAccountId, Arg.Any<CancellationToken>())
+            .Returns(individualAccount);
+
+        _householdContext.Role.Returns(HouseholdRole.Member);
+
+        var service = CreateService();
+        var act = async () => await service.CreateBatchAsync(_statementId, individualAccountId);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*Only the account owner or a household admin*");
+    }
+
+    [Fact]
+    public async Task CreateBatchAsync_WhenStatementAlreadyCommitted_ThrowsInvalidOperationException()
+    {
+        var committedStatement = new Statement(
+            Guid.NewGuid(),
+            _householdId,
+            _userId,
+            "already_committed.csv",
+            StatementFormat.Csv,
+            1024,
+            "key-committed",
+            _now);
+        committedStatement.MarkParsed(5);
+        committedStatement.MarkCommitted();
+
+        _statementRepo.GetByIdAsync(committedStatement.Id, Arg.Any<CancellationToken>())
+            .Returns(committedStatement);
+
+        var service = CreateService();
+        var act = async () => await service.CreateBatchAsync(committedStatement.Id, _accountId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*already been committed*");
+    }
+
+    [Fact]
+    public async Task CommitBatchAsync_WhenBatchCancelled_ThrowsInvalidOperationException()
+    {
+        var batch = new ImportBatch(Guid.NewGuid(), _householdId, _statementId, _accountId, _userId, _now);
+        batch.MarkCancelled();
+
+        _batchRepo.GetByIdWithRowsAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        var service = CreateService();
+        var act = async () => await service.CommitBatchAsync(batch.Id);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Cannot commit a cancelled import batch*");
+    }
+
+    [Fact]
+    public async Task CommitBatchAsync_WhenStatementFailed_ThrowsInvalidOperationException()
+    {
+        var failedStatement = new Statement(
+            _statementId,
+            _householdId,
+            _userId,
+            "statement.csv",
+            StatementFormat.Csv,
+            1024,
+            "key",
+            _now);
+        failedStatement.MarkFailed("Statement parser failure");
+
+        var batch = new ImportBatch(Guid.NewGuid(), _householdId, _statementId, _accountId, _userId, _now);
+        var row = new ImportStagingRow(
+            Guid.NewGuid(),
+            _householdId,
+            batch.Id,
+            1,
+            null,
+            new DateOnly(2026, 10, 1),
+            "Coffee",
+            4.50m,
+            TransactionType.Debit,
+            "USD",
+            "fp-1",
+            StagingRowValidationStatus.Valid,
+            null);
+        batch.AddRow(row);
+
+        _batchRepo.GetByIdWithRowsAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        // Assign statement to batch navigation property via reflection/mock
+        typeof(ImportBatch).GetProperty("Statement")!.SetValue(batch, failedStatement);
+
+        var service = CreateService();
+        var act = async () => await service.CommitBatchAsync(batch.Id);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*failed statement*");
+    }
+
+    [Fact]
+    public async Task CommitBatchAsync_WhenIndividualAccount_NonOwnerNonAdmin_ThrowsUnauthorizedAccessException()
+    {
+        var indAccountId = Guid.NewGuid();
+        var indAccount = new Account(
+            indAccountId,
+            _householdId,
+            "Partner 2 Checking",
+            AccountType.Checking,
+            OwnershipType.Individual,
+            "partner-2",
+            "USD",
+            "partner-2",
+            _now);
+
+        var batch = new ImportBatch(Guid.NewGuid(), _householdId, _statementId, indAccountId, _userId, _now);
+        var row = new ImportStagingRow(
+            Guid.NewGuid(),
+            _householdId,
+            batch.Id,
+            1,
+            null,
+            new DateOnly(2026, 10, 1),
+            "Coffee",
+            4.50m,
+            TransactionType.Debit,
+            "USD",
+            "fp-1",
+            StagingRowValidationStatus.Valid,
+            null);
+        batch.AddRow(row);
+
+        _batchRepo.GetByIdWithRowsAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        _accountRepo.GetByIdAsync(_householdId, indAccountId, Arg.Any<CancellationToken>())
+            .Returns(indAccount);
+
+        _householdContext.Role.Returns(HouseholdRole.Member);
+
+        var service = CreateService();
+        var act = async () => await service.CommitBatchAsync(batch.Id);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*Only the account owner or a household admin*");
+    }
+
+    [Fact]
+    public async Task UpdateStagingRowAsync_WhenBatchCancelled_ThrowsInvalidOperationException()
+    {
+        var batch = new ImportBatch(Guid.NewGuid(), _householdId, _statementId, _accountId, _userId, _now);
+        batch.MarkCancelled();
+
+        _batchRepo.GetByIdWithRowsAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        var service = CreateService();
+        var act = async () => await service.UpdateStagingRowAsync(batch.Id, Guid.NewGuid(), new UpdateStagingRowRequest(true, null, null, null, null, null, null));
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Cannot modify rows in a cancelled import batch*");
+    }
+
+    [Fact]
+    public async Task UpdateStagingRowAsync_WhenIndividualAccount_NonOwnerNonAdmin_ThrowsUnauthorizedAccessException()
+    {
+        var indAccountId = Guid.NewGuid();
+        var indAccount = new Account(
+            indAccountId,
+            _householdId,
+            "Partner 2 Account",
+            AccountType.Checking,
+            OwnershipType.Individual,
+            "partner-2",
+            "USD",
+            "partner-2",
+            _now);
+
+        var batch = new ImportBatch(Guid.NewGuid(), _householdId, _statementId, indAccountId, _userId, _now);
+        var row = new ImportStagingRow(
+            Guid.NewGuid(),
+            _householdId,
+            batch.Id,
+            1,
+            null,
+            new DateOnly(2026, 10, 1),
+            "Coffee",
+            4.50m,
+            TransactionType.Debit,
+            "USD",
+            "fp-1",
+            StagingRowValidationStatus.Valid,
+            null);
+        batch.AddRow(row);
+
+        typeof(ImportBatch).GetProperty("Account")!.SetValue(batch, indAccount);
+
+        _batchRepo.GetByIdWithRowsAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        _householdContext.Role.Returns(HouseholdRole.Member);
+
+        var service = CreateService();
+        var act = async () => await service.UpdateStagingRowAsync(batch.Id, row.Id, new UpdateStagingRowRequest(false, null, null, null, null, null, null));
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*Only the account owner or a household admin*");
+    }
+
+    [Fact]
+    public async Task BulkUpdateRowsAsync_WhenBatchCancelled_ThrowsInvalidOperationException()
+    {
+        var batch = new ImportBatch(Guid.NewGuid(), _householdId, _statementId, _accountId, _userId, _now);
+        batch.MarkCancelled();
+
+        _batchRepo.GetByIdWithRowsAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        var service = CreateService();
+        var act = async () => await service.BulkUpdateRowsAsync(batch.Id, new BulkUpdateRowsRequest(null, true, true, null, null));
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Cannot modify rows in a cancelled import batch*");
+    }
+
+    [Fact]
+    public async Task BulkUpdateRowsAsync_SelectAll_SkipsInvalidRows()
+    {
+        var batch = new ImportBatch(Guid.NewGuid(), _householdId, _statementId, _accountId, _userId, _now);
+        typeof(ImportBatch).GetProperty("Account")!.SetValue(batch, _activeAccount);
+
+        var validRow = new ImportStagingRow(
+            Guid.NewGuid(),
+            _householdId,
+            batch.Id,
+            1,
+            null,
+            new DateOnly(2026, 10, 1),
+            "Groceries",
+            50m,
+            TransactionType.Debit,
+            "USD",
+            "fp-1",
+            StagingRowValidationStatus.Valid,
+            null);
+
+        var invalidRow = new ImportStagingRow(
+            Guid.NewGuid(),
+            _householdId,
+            batch.Id,
+            2,
+            null,
+            null,
+            "",
+            null,
+            null,
+            "USD",
+            "",
+            StagingRowValidationStatus.Invalid,
+            "Missing date and amount");
+
+        validRow.SetSelection(false);
+        batch.AddRow(validRow);
+        batch.AddRow(invalidRow);
+
+        _batchRepo.GetByIdWithRowsAsync(batch.Id, Arg.Any<CancellationToken>())
+            .Returns(batch);
+
+        var service = CreateService();
+        var result = await service.BulkUpdateRowsAsync(batch.Id, new BulkUpdateRowsRequest(null, true, true, null, null));
+
+        result.Rows.First(r => r.Id == validRow.Id).IsSelected.Should().BeTrue();
+        result.Rows.First(r => r.Id == invalidRow.Id).IsSelected.Should().BeFalse();
+    }
 }

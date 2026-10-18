@@ -133,6 +133,11 @@ public class ImportStagingRow
 
     public void SetSelection(bool isSelected)
     {
+        if (isSelected && ValidationStatus == StagingRowValidationStatus.Invalid)
+        {
+            throw new InvalidOperationException("Cannot select an invalid row for import without correcting validation errors first.");
+        }
+
         IsSelected = isSelected;
         if (!isSelected && Resolution == RowResolution.None)
         {

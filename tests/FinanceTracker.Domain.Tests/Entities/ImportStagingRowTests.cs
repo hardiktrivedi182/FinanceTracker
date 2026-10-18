@@ -148,4 +148,27 @@ public class ImportStagingRowTests
         row.IsSelected.Should().BeFalse();
         row.IsEligibleForCommit.Should().BeFalse();
     }
+
+    [Fact]
+    public void SetSelection_True_OnInvalidRow_ThrowsInvalidOperationException()
+    {
+        var row = new ImportStagingRow(
+            Guid.NewGuid(),
+            _householdId,
+            _batchId,
+            7,
+            null,
+            _date,
+            "",
+            null,
+            null,
+            "USD",
+            "",
+            StagingRowValidationStatus.Invalid,
+            "Missing description and amount");
+
+        var act = () => row.SetSelection(true);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Cannot select an invalid row*");
+    }
 }

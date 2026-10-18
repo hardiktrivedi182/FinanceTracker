@@ -141,7 +141,7 @@
 - Currencies are determined by the target account's ISO 4217 currency code.
 - Imported transactions do not alter `AccountValuation` or account balance entities.
 
-**Status:** **Completed & Verified (177 backend tests + 13 frontend tests)**
+**Status:** **Completed, Audited & Verified (195 backend tests + 13 frontend tests; see `docs/reviews/import-integrity-review.md`)**
 **Layers:** Domain · Importing · Application · Infrastructure (Migrations & Repositories) · API · Web · Tests  
 **Complexity:** **L**
 

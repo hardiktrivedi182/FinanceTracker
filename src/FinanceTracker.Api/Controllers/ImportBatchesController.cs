@@ -104,6 +104,7 @@ public class ImportBatchesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ImportBatchDetailDto>> UpdateStagingRow(
         Guid batchId,
         Guid rowId,
@@ -114,6 +115,10 @@ public class ImportBatchesController : ControllerBase
         {
             var updated = await _batchService.UpdateStagingRowAsync(batchId, rowId, request, ct);
             return Ok(updated);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, new { error = "The import batch was modified concurrently by another operation. Please refresh and try again." });
         }
         catch (KeyNotFoundException ex)
         {
@@ -142,6 +147,7 @@ public class ImportBatchesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ImportBatchDetailDto>> BulkUpdateRows(
         Guid batchId,
         [FromBody] BulkUpdateRowsRequest request,
@@ -151,6 +157,10 @@ public class ImportBatchesController : ControllerBase
         {
             var updated = await _batchService.BulkUpdateRowsAsync(batchId, request, ct);
             return Ok(updated);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, new { error = "The import batch was modified concurrently by another operation. Please refresh and try again." });
         }
         catch (KeyNotFoundException ex)
         {
@@ -182,6 +192,7 @@ public class ImportBatchesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CommitImportBatchResultDto>> CommitBatch(
         Guid batchId,
         CancellationToken ct = default)
@@ -190,6 +201,10 @@ public class ImportBatchesController : ControllerBase
         {
             var result = await _batchService.CommitBatchAsync(batchId, ct);
             return Ok(result);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, new { error = "The import batch was modified concurrently by another operation. Please refresh and try again." });
         }
         catch (KeyNotFoundException ex)
         {

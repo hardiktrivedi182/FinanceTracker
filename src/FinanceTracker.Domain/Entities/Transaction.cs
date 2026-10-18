@@ -54,9 +54,9 @@ public class Transaction
             throw new ArgumentException("Account Id cannot be empty.", nameof(accountId));
         }
 
-        if (amount < 0)
+        if (amount <= 0)
         {
-            throw new ArgumentException("Transaction amount must be non-negative.", nameof(amount));
+            throw new ArgumentException("Transaction amount must be strictly positive.", nameof(amount));
         }
 
         ValidateDescription(description);

@@ -89,7 +89,31 @@ public class TransactionTests
             _now);
 
         act.Should().Throw<ArgumentException>()
-            .WithMessage("*non-negative*");
+            .WithMessage("*strictly positive*");
+    }
+
+    [Fact]
+    public void Constructor_ZeroAmount_ThrowsArgumentException()
+    {
+        var act = () => new Transaction(
+            _id,
+            _householdId,
+            _accountId,
+            null,
+            null,
+            null,
+            _date,
+            null,
+            "Invalid Zero",
+            0m,
+            TransactionType.Debit,
+            "USD",
+            "fingerprint",
+            "user-1",
+            _now);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*strictly positive*");
     }
 
     [Fact]

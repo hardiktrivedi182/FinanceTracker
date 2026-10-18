@@ -1,5 +1,6 @@
 using FinanceTracker.Application.ImportBatches.Persistence;
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Infrastructure.Persistence.Repositories;
@@ -67,8 +68,15 @@ public class ImportBatchRepository : IImportBatchRepository
     public async Task UpdateAsync(ImportBatch batch, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(batch);
-        _context.ImportBatches.Update(batch);
-        await _context.SaveChangesAsync(ct);
+        try
+        {
+            _context.ImportBatches.Update(batch);
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new InvalidOperationException("The import batch was modified concurrently by another operation. Please refresh and try again.");
+        }
     }
 
     public async Task CommitBatchAtomicAsync(
@@ -83,33 +91,53 @@ public class ImportBatchRepository : IImportBatchRepository
         var strategy = _context.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
         {
-            if (_context.Database.IsRelational())
+            try
             {
-                await using var tx = await _context.Database.BeginTransactionAsync(ct);
-                if (transactions.Count > 0)
+                if (_context.Database.IsRelational())
                 {
-                    await _context.Transactions.AddRangeAsync(transactions, ct);
+                    await using var tx = await _context.Database.BeginTransactionAsync(ct);
+                    if (transactions.Count > 0)
+                    {
+                        await _context.Transactions.AddRangeAsync(transactions, ct);
+                    }
+                    _context.ImportBatches.Update(batch);
+                    if (statement != null)
+                    {
+                        _context.Statements.Update(statement);
+                    }
+                    await _context.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
                 }
-                _context.ImportBatches.Update(batch);
-                if (statement != null)
+                else
                 {
-                    _context.Statements.Update(statement);
+                    if (transactions.Count > 0)
+                    {
+                        await _context.Transactions.AddRangeAsync(transactions, ct);
+                    }
+                    _context.ImportBatches.Update(batch);
+                    if (statement != null)
+                    {
+                        _context.Statements.Update(statement);
+                    }
+                    await _context.SaveChangesAsync(ct);
                 }
-                await _context.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
             }
-            else
+            catch (DbUpdateConcurrencyException)
             {
-                if (transactions.Count > 0)
+                // Concurrency conflict detected on optimistic RowVersion check.
+                // Check if another concurrent commit succeeded.
+                var existing = await _context.ImportBatches
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.Id == batch.Id, ct);
+
+                if (existing?.Status == ImportBatchStatus.Committed)
                 {
-                    await _context.Transactions.AddRangeAsync(transactions, ct);
+                    // A concurrent commit request already succeeded and committed this batch!
+                    // Return safely so the commit operation behaves idempotently without duplicating transactions.
+                    return;
                 }
-                _context.ImportBatches.Update(batch);
-                if (statement != null)
-                {
-                    _context.Statements.Update(statement);
-                }
-                await _context.SaveChangesAsync(ct);
+
+                throw new InvalidOperationException("The import batch was modified concurrently by another operation. Please refresh and review before committing.");
             }
         });
     }

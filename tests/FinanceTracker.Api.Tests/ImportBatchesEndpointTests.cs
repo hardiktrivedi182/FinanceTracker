@@ -143,4 +143,88 @@ public class ImportBatchesEndpointTests : IClassFixture<WebApplicationFactory<Pr
         transactions.All(t => t.CurrencyCode == "USD").Should().BeTrue();
         transactions.All(t => t.SignedAmount < 0).Should().BeTrue(); // All were debits
     }
+
+    [Fact]
+    public async Task CreateBatch_TargetingOtherUserIndividualAccount_AsMember_ReturnsForbidden()
+    {
+        var adminClient = _factory.CreateClient();
+        adminClient.DefaultRequestHeaders.Add("X-User-Id", "partner-1");
+
+        // 1. Partner 1 creates an individual account owned by partner-1
+        var accountRequest = new CreateAccountRequest(
+            "Partner 1 Private Account",
+            AccountType.Checking,
+            OwnershipType.Individual,
+            "partner-1",
+            "USD");
+
+        var accountResponse = await adminClient.PostAsJsonAsync("/api/accounts", accountRequest);
+        accountResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createdAccount = await accountResponse.Content.ReadFromJsonAsync<AccountDto>();
+        var accountId = createdAccount!.Id;
+
+        // 2. Upload a statement
+        var csv = "Date,Description,Amount\n2026-10-01,Groceries,-25.00";
+        using var multipart = new MultipartFormDataContent();
+        multipart.Add(new ByteArrayContent(Encoding.UTF8.GetBytes(csv)), "file", "groceries.csv");
+        var uploadResponse = await adminClient.PostAsync("/api/statements/upload", multipart);
+        uploadResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var uploadResult = await uploadResponse.Content.ReadFromJsonAsync<StatementUploadResultDto>();
+        var statementId = uploadResult!.StatementId;
+
+        // 3. Partner 2 (household member, not admin and not owner) attempts to create an import batch for Partner 1's individual account
+        var memberClient = _factory.CreateClient();
+        memberClient.DefaultRequestHeaders.Add("X-User-Id", "partner-2");
+
+        var createBatchReq = new CreateImportBatchRequest(statementId, accountId);
+        var response = await memberClient.PostAsJsonAsync("/api/import-batches", createBatchReq);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task UpdateStagingRow_SelectingInvalidRow_ReturnsBadRequest()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-User-Id", "partner-1");
+
+        // 1. Create a joint account
+        var accountRequest = new CreateAccountRequest(
+            "Validation Test Account",
+            AccountType.Checking,
+            OwnershipType.Joint,
+            null,
+            "USD");
+        var accountResponse = await client.PostAsJsonAsync("/api/accounts", accountRequest);
+        var createdAccount = await accountResponse.Content.ReadFromJsonAsync<AccountDto>();
+
+        // 2. Upload statement with unparseable/invalid row (e.g. zero amount)
+        var csv = "Date,Description,Amount\n2026-10-01,Zero Amount Item,0.00";
+        using var multipart = new MultipartFormDataContent();
+        multipart.Add(new ByteArrayContent(Encoding.UTF8.GetBytes(csv)), "file", "invalid.csv");
+        var uploadResponse = await client.PostAsync("/api/statements/upload", multipart);
+        var uploadResult = await uploadResponse.Content.ReadFromJsonAsync<StatementUploadResultDto>();
+
+        // 3. Create batch
+        var createBatchReq = new CreateImportBatchRequest(uploadResult!.StatementId, createdAccount!.Id);
+        var batchResponse = await client.PostAsJsonAsync("/api/import-batches", createBatchReq);
+        batchResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var batchDetail = await batchResponse.Content.ReadFromJsonAsync<ImportBatchDetailDto>();
+        batchDetail.Should().NotBeNull();
+
+        var invalidRow = batchDetail!.Rows.First(r => r.ValidationStatus == StagingRowValidationStatus.Invalid);
+
+        // 4. Attempt to force select invalid row without correcting it
+        var selectReq = new UpdateStagingRowRequest(
+            IsSelected: true,
+            Resolution: null,
+            ResolutionNotes: null,
+            ResolvedDate: null,
+            ResolvedDescription: null,
+            ResolvedAmount: null,
+            ResolvedType: null);
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/import-batches/{batchDetail.Batch.Id}/rows/{invalidRow.Id}", selectReq);
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
 }

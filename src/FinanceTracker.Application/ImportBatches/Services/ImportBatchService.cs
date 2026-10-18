@@ -64,6 +64,11 @@ public class ImportBatchService : IImportBatchService
             throw new UnauthorizedAccessException("Statement does not belong to the active household.");
         }
 
+        if (statement.Status == StatementProcessingStatus.Committed)
+        {
+            throw new InvalidOperationException("This statement has already been committed to the ledger.");
+        }
+
         // 2. Verify Target Account
         var account = await _accountRepository.GetByIdAsync(householdId, accountId, ct)
             ?? throw new KeyNotFoundException($"Account '{accountId}' was not found.");
@@ -77,6 +82,8 @@ public class ImportBatchService : IImportBatchService
         {
             throw new InvalidOperationException($"Cannot import statement into deactivated account '{account.Name}'.");
         }
+
+        EnsureAccountWriteAccess(account, userId);
 
         // 3. Open statement stream and parse
         await using var stream = await _statementStorage.OpenReadAsync(statement.StorageKey, ct);
@@ -240,6 +247,15 @@ public class ImportBatchService : IImportBatchService
             throw new InvalidOperationException("Cannot modify rows in an already committed import batch.");
         }
 
+        if (batch.Status == ImportBatchStatus.Cancelled)
+        {
+            throw new InvalidOperationException("Cannot modify rows in a cancelled import batch.");
+        }
+
+        var account = batch.Account ?? await _accountRepository.GetByIdAsync(_householdContext.HouseholdId, batch.AccountId, ct)
+            ?? throw new KeyNotFoundException($"Account '{batch.AccountId}' was not found.");
+        EnsureAccountWriteAccess(account, _currentUser.UserId!);
+
         var row = batch.Rows.FirstOrDefault(r => r.Id == rowId)
             ?? throw new KeyNotFoundException($"Staging row '{rowId}' was not found in batch '{batchId}'.");
 
@@ -269,7 +285,7 @@ public class ImportBatchService : IImportBatchService
                             row.EffectiveDescription,
                             row.EffectiveAmount.Value,
                             row.EffectiveType.Value,
-                            batch.Account.CurrencyCode);
+                            account.CurrencyCode);
                         row.UpdateDuplicateStatus(row.DuplicateStatus, row.DuplicateReason, row.MatchedTransactionId, newFingerprint);
                     }
                     break;
@@ -309,6 +325,15 @@ public class ImportBatchService : IImportBatchService
             throw new InvalidOperationException("Cannot modify rows in an already committed import batch.");
         }
 
+        if (batch.Status == ImportBatchStatus.Cancelled)
+        {
+            throw new InvalidOperationException("Cannot modify rows in a cancelled import batch.");
+        }
+
+        var account = batch.Account ?? await _accountRepository.GetByIdAsync(_householdContext.HouseholdId, batch.AccountId, ct)
+            ?? throw new KeyNotFoundException($"Account '{batch.AccountId}' was not found.");
+        EnsureAccountWriteAccess(account, _currentUser.UserId!);
+
         var targetRows = request.SelectAll == true
             ? batch.Rows
             : batch.Rows.Where(r => request.RowIds?.Contains(r.Id) == true).ToList();
@@ -328,6 +353,10 @@ public class ImportBatchService : IImportBatchService
             }
             else if (request.IsSelected.HasValue)
             {
+                if (request.IsSelected.Value && row.ValidationStatus == StagingRowValidationStatus.Invalid)
+                {
+                    continue;
+                }
                 row.SetSelection(request.IsSelected.Value);
             }
         }
@@ -369,6 +398,16 @@ public class ImportBatchService : IImportBatchService
                 $"Import batch was already committed on {batch.CommittedAt:yyyy-MM-dd HH:mm:ss} UTC. Idempotent commit succeeded without duplicating transactions.");
         }
 
+        if (batch.Status == ImportBatchStatus.Cancelled)
+        {
+            throw new InvalidOperationException("Cannot commit a cancelled import batch.");
+        }
+
+        if (batch.Statement != null && batch.Statement.Status == StatementProcessingStatus.Failed)
+        {
+            throw new InvalidOperationException("Cannot commit an import batch for a failed statement.");
+        }
+
         // Revalidate selected rows on the server
         var selectedRows = batch.Rows.Where(r => r.IsSelected).ToList();
         if (selectedRows.Count == 0)
@@ -384,6 +423,8 @@ public class ImportBatchService : IImportBatchService
         {
             throw new InvalidOperationException("Target account is inactive or does not belong to the authorized household.");
         }
+
+        EnsureAccountWriteAccess(account, userId);
 
         var transactionsToPersist = new List<Transaction>();
 
@@ -449,7 +490,7 @@ public class ImportBatchService : IImportBatchService
             batch.Statement.MarkCommitted();
         }
 
-        // Commit atomically to database
+        // Commit atomically to database with optimistic concurrency conflict detection
         await _batchRepository.CommitBatchAtomicAsync(batch, transactionsToPersist, batch.Statement, ct);
 
         var excludedCount = batch.Rows.Count(r => !r.IsSelected || r.Resolution == RowResolution.Excluded);
@@ -464,6 +505,21 @@ public class ImportBatchService : IImportBatchService
             0,
             now,
             $"Successfully committed {transactionsToPersist.Count} transactions into '{account.Name}'.");
+    }
+
+    private void EnsureAccountWriteAccess(Account account, string currentUserId)
+    {
+        if (account.OwnershipType == OwnershipType.Individual)
+        {
+            bool isOwner = string.Equals(account.OwnerUserId, currentUserId, StringComparison.Ordinal);
+            bool isAdmin = _householdContext.Role == HouseholdRole.Admin;
+
+            if (!isOwner && !isAdmin)
+            {
+                throw new UnauthorizedAccessException(
+                    "Only the account owner or a household admin may modify this individual account or its import batches.");
+            }
+        }
     }
 
     private void EnsureHouseholdAccess()
